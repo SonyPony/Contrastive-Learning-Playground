@@ -1,0 +1,21 @@
+data:
+  dataset:
+    root_dir: ${hydra:runtime.cwd}/../data
+
+    data_loader:
+      pin_memory: true
+      num_workers: 4
+      batch_size: 256
+      drop_last: true
+
+train:
+  gpus: -1
+  trainer:
+    max_epochs: 10
+
+  optimizer:
+    lr: 1e-3
+    weight_decay: 1e-6
+
+model:
+  feature_size: 128
