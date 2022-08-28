@@ -6,29 +6,31 @@ from torch.optim import Adam
 from termcolor import cprint
 from typing import Dict
 
-def get_negative_mask(batch_size):
-    negative_mask = torch.ones((batch_size, 2 * batch_size), dtype=bool)
-    for i in range(batch_size):
-        negative_mask[i, i] = 0
-        negative_mask[i, i + batch_size] = 0
 
-    negative_mask = torch.cat((negative_mask, negative_mask), 0)
-    return negative_mask
+def negative_mask(batch_size: int) -> torch.Tensor:
+    mask = torch.ones((batch_size,) * 2, dtype=torch.bool)
+    # remove identity
+    mask = torch.logical_xor(mask, torch.eye(batch_size, dtype=torch.bool))
+    # replicate for augmented samples as well
+    return mask.repeat(2, 2)
+
 
 class LightningModelWrapper(pl.LightningModule):
     def __init__(
         self,
         model: nn.Module,
         optim_parameters: Dict,
-        temperature: float = 0.0
+        temperature: float = 0.5,
+        tau_plus: float = 0.0
     ):
         super().__init__()
 
         self.model = model
         self.temperature = temperature
+        self.tau_plus = tau_plus
         self.optim_parameters = optim_parameters
 
-        self.save_hyperparameters()
+        #self.save_hyperparameters(ignore=["model"])
 
     #def loss(self, x):
     #    pass
@@ -42,12 +44,13 @@ class LightningModelWrapper(pl.LightningModule):
         feature_b, projected_b = self.model(pos_b)
 
         # neg score
-        out = torch.cat([projected_a, projected_b], dim=0)
+        out = torch.cat([projected_a, projected_b], dim=0)  # all samples (2*batch_size, N)
         neg = torch.exp(torch.mm(out, out.t().contiguous()) / self.temperature)
-        mask = get_negative_mask(batch_size).cuda()
+        mask = negative_mask(batch_size).cuda()
         neg = neg.masked_select(mask).view(2 * batch_size, -1)
 
         # pos score
+        # row-wise dot product
         pos = torch.exp(torch.sum(projected_a * projected_b, dim=-1) / self.temperature)
         pos = torch.cat([pos, pos], dim=0)
 
