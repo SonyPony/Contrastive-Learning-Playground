@@ -22,7 +22,7 @@ def main(cfg: DictConfig):
     model = BaseModel(**cfg.model)
     wrapped_model = LightningModelWrapper(model=model, optim_parameters=cfg.train.optimizer)
     data_module = LightningSTL10Pair(
-        transform=transforms.Compose([
+        train_transform=transforms.Compose([
             transforms.RandomResizedCrop(32),
             transforms.ToTensor()
         ]),

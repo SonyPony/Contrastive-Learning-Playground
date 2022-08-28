@@ -33,7 +33,8 @@ class LightningSTL10Pair(pl.LightningDataModule):
     root_dir: str
     data_loader: ExDict
 
-    transform: Optional[Callable] = None
+    train_transform: Optional[Callable] = None
+    test_transform: Optional[Callable] = None
 
     train: STL10Pair = field(init=False)
     val: STL10Pair = field(init=False)
@@ -43,10 +44,10 @@ class LightningSTL10Pair(pl.LightningDataModule):
         super().__init__()
 
     def setup(self, stage: Optional[str] = None):
-        shared_params = {"root": self.root_dir, "transform": self.transform}
+        shared_params = {"root": self.root_dir}
 
-        self.train = STL10Pair(split="train+unlabeled", **shared_params)
-        self.val = STL10Pair(split="test", **shared_params)
+        self.train = STL10Pair(split="train+unlabeled", transform=self.train_transform, **shared_params)
+        self.val = STL10Pair(split="test", transform=self.test_transform, **shared_params)
         #self.test = STL10Pair(**shared_params, split="train+unlabeled")
 
     def train_dataloader(self):
