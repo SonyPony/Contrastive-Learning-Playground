@@ -5,12 +5,13 @@ import torch.nn as nn
 from torch.optim import Adam
 from termcolor import cprint
 from typing import Dict
+from util import ExDict
 
 
-def negative_mask(batch_size: int) -> torch.Tensor:
-    mask = torch.ones((batch_size,) * 2, dtype=torch.bool)
+def negative_mask(batch_size: int, device) -> torch.Tensor:
+    mask = torch.ones((batch_size,) * 2, dtype=torch.bool, device=device)
     # remove identity
-    mask = torch.logical_xor(mask, torch.eye(batch_size, dtype=torch.bool))
+    mask = torch.logical_xor(mask, torch.eye(batch_size, dtype=torch.bool, device=device))
     # replicate for augmented samples as well
     return mask.repeat(2, 2)
 
@@ -20,8 +21,10 @@ class LightningModelWrapper(pl.LightningModule):
         self,
         model: nn.Module,
         optim_parameters: Dict,
+        batch_size: int,
         temperature: float = 0.5,
-        tau_plus: float = 0.0
+        tau_plus: float = 0.0,
+        debiased: bool = False
     ):
         super().__init__()
 
@@ -29,43 +32,47 @@ class LightningModelWrapper(pl.LightningModule):
         self.temperature = temperature
         self.tau_plus = tau_plus
         self.optim_parameters = optim_parameters
+        self.batch_size = batch_size
+        self.debiased = debiased
 
-        #self.save_hyperparameters(ignore=["model"])
+        self.save_hyperparameters(ignore="model")
 
-    #def loss(self, x):
-    #    pass
+    def loss(self, projected_a: torch.Tensor, projected_b: torch.Tensor):
+        samples_count = 2 * self.batch_size
+
+        # neg score
+        out = torch.cat([projected_a, projected_b], dim=0)  # all samples (2*batch_size, N)
+        neg = torch.exp(torch.mm(out, out.t().contiguous()) / self.temperature)     # NOQA
+
+        # mask out identities
+        mask = negative_mask(self.batch_size, device=self.device)
+        neg = neg[mask].view(samples_count, -1)
+
+        # pos score
+        # row-wise dot product
+        pos = torch.exp(torch.sum(projected_a * projected_b, dim=-1) / self.temperature)       # NOQA
+        pos = torch.cat([pos, pos], dim=0)
+
+        # estimator g()
+        if self.debiased:
+            N = samples_count - 2
+            neg = (-self.tau_plus * N * pos + neg.sum(dim=-1)) / (1 - self.tau_plus)
+            # constrain (optional)
+            neg = torch.clamp(neg, min=N * torch.e ** (-1 / self.temperature))
+
+        else:
+            neg = neg.sum(dim=-1)
+
+        return (-torch.log(pos / (pos + neg))).mean()
 
     def forward(self, x):
         return self.model(x)
 
     def _step(self, pos_a, pos_b, label):
-        batch_size = 256
-        feature_a, projected_a = self.model(pos_a)
-        feature_b, projected_b = self.model(pos_b)
+        _, projected_a = self.model(pos_a)
+        _, projected_b = self.model(pos_b)
 
-        # neg score
-        out = torch.cat([projected_a, projected_b], dim=0)  # all samples (2*batch_size, N)
-        neg = torch.exp(torch.mm(out, out.t().contiguous()) / self.temperature)
-        mask = negative_mask(batch_size).cuda()
-        neg = neg.masked_select(mask).view(2 * batch_size, -1)
-
-        # pos score
-        # row-wise dot product
-        pos = torch.exp(torch.sum(projected_a * projected_b, dim=-1) / self.temperature)
-        pos = torch.cat([pos, pos], dim=0)
-
-        # estimator g()
-        debiased=False
-        if debiased:
-            pass
-            #N = batch_size * 2 - 2
-            #Ng = (-tau_plus * N * pos + neg.sum(dim=-1)) / (1 - tau_plus)
-            # constrain (optional)
-            #Ng = torch.clamp(Ng, min=N * np.e ** (-1 / temperature))
-        else:
-            Ng = neg.sum(dim=-1)
-        loss = (- torch.log(pos / (pos + Ng) )).mean()
-        return loss
+        return self.loss(projected_a, projected_b)
 
     def training_step(self, batch, batch_idx):
         pos_a, pos_b, label = batch

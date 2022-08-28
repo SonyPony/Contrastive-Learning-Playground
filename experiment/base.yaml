@@ -1,3 +1,6 @@
+log:
+  dir: ${hydra:runtime.cwd}/../log
+
 data:
   dataset:
     root_dir: ${hydra:runtime.cwd}/../data
@@ -17,6 +20,11 @@ train:
   optimizer:
     lr: 1e-3
     weight_decay: 1e-6
+
+  loss:
+    temperature: 0.5
+    tau_plus: 0.0
+    debiased: false
 
 model:
   feature_size: 128
