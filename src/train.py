@@ -13,7 +13,7 @@ from util import ExperimentLoader
 from dataset import LightningSTL10Pair
 
 
-@hydra.main(config_path="../experiment", config_name="base")
+@hydra.main(config_path="../experiment", config_name="base", version_base="1.1")
 def main(cfg: DictConfig):
     pl.seed_everything(42)
     torch.multiprocessing.set_sharing_strategy('file_system')
@@ -36,6 +36,9 @@ def main(cfg: DictConfig):
             transforms.RandomResizedCrop(32),
             transforms.ToTensor()
         ]),
+        test_transform=transforms.Compose([
+            transforms.ToTensor()
+        ]),
         **cfg.data.dataset
     )
 
@@ -44,7 +47,7 @@ def main(cfg: DictConfig):
     logger.experiment.log_code(hydra.utils.get_original_cwd())
 
     # saving the best model
-    model_checkpoint = ModelCheckpoint(monitor="val/loss", mode="min")
+    model_checkpoint = ModelCheckpoint(monitor="val/acc-1", mode="min")
 
     # TODO logger and strategy
     trainer = pl.Trainer(

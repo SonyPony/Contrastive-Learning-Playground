@@ -44,11 +44,14 @@ class LightningSTL10Pair(pl.LightningDataModule):
         super().__init__()
 
     def setup(self, stage: Optional[str] = None):
-        shared_params = {"root": self.root_dir}
+        shared_params = {"root": self.root_dir, "download": True}
 
         self.train = STL10Pair(split="train+unlabeled", transform=self.train_transform, **shared_params)
         self.val = STL10Pair(split="test", transform=self.test_transform, **shared_params)
-        #self.test = STL10Pair(**shared_params, split="train+unlabeled")
+        self.memory_bank = STL10Pair(split="train", transform=self.test_transform, **shared_params)
+
+    def memory_bank_data_loader(self):
+        return DataLoader(self.memory_bank, shuffle=False, **self.data_loader)
 
     def train_dataloader(self):
         return DataLoader(self.train, shuffle=True, **self.data_loader)

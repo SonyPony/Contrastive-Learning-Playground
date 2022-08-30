@@ -14,7 +14,7 @@ data:
 train:
   gpus: -1
   trainer:
-    max_epochs: 10
+    max_epochs: 500
     num_sanity_val_steps: 0
 
   optimizer:
