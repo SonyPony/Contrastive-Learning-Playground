@@ -10,7 +10,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from model import LightningModelWrapper, BaseModel
 from util import ExperimentLoader
-from dataset import LightningSTL10Pair
+from dataset import LightningDatasetWrapper
 
 
 @hydra.main(config_path="../experiment", config_name="base", version_base="1.1")
@@ -31,7 +31,7 @@ def main(cfg: DictConfig):
     )
 
     # prepare dataset module
-    data_module = LightningSTL10Pair(
+    data_module = LightningDatasetWrapper(
         train_transform=transforms.Compose([
             transforms.RandomResizedCrop(32),
             transforms.ToTensor()
