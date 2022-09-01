@@ -127,7 +127,7 @@ class LightningModelWrapper(pl.LightningModule):
         feature_bank = list()
 
         # create features database
-        cprint("Computing memory bank...", color="yellow")
+        #cprint("Computing memory bank...", color="yellow")
         memory_dl = self.trainer.datamodule.memory_bank_data_loader()
         self.class_count = len(memory_dl.dataset.classes)
 
@@ -138,7 +138,7 @@ class LightningModelWrapper(pl.LightningModule):
         # [D, N] - D feature dimensionality, N samples count
         self.feature_bank = torch.cat(feature_bank, dim=0).t().contiguous()
         # [N] - get all labels
-        self.feature_labels = torch.tensor(memory_dl.dataset.labels, device=self.device)
+        self.feature_labels = torch.tensor(memory_dl.dataset.targets, device=self.device)
 
 
     def on_validation_epoch_end(self):
