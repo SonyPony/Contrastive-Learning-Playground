@@ -5,6 +5,7 @@ data:
   dataset:
     root_dir: ${hydra:runtime.cwd}/../data
     train_samples_per_class: 5000
+    num_classes: 10
 
     data_loader:
       pin_memory: true

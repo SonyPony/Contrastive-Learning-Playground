@@ -29,7 +29,7 @@ class STL10Pair(STL10):
 
 
 class CIFAR10Pair(CIFAR10):
-    def __init__(self, samples_per_class: Optional[int] = None, *args, **kwargs):
+    def __init__(self, classes_count: Optional[int] = None, samples_per_class: Optional[int] = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         targets = np.array(self.targets)
@@ -42,7 +42,8 @@ class CIFAR10Pair(CIFAR10):
             # 0, 1, 1, 3, 2 -> 0, 1, 1, 2, 3 (class indices) -> 0, 1, 2, 5, 4 (samples indices)
             sorted_samples_indices = targets.argsort()
             data = list()
-            classes_count = len(self.classes)
+            if not classes_count:
+                classes_count = len(self.classes)
 
             # sample first N samples from each class
             for i in range(classes_count):
@@ -67,6 +68,7 @@ class LightningDatasetWrapper(pl.LightningDataModule):
     root_dir: str
     data_loader: ExDict
     train_samples_per_class: int
+    num_classes: int    # TODO pass to datasets
 
     train_transform: Optional[Callable] = None
     test_transform: Optional[Callable] = None
@@ -79,7 +81,7 @@ class LightningDatasetWrapper(pl.LightningDataModule):
         super().__init__()
 
     def setup(self, stage: Optional[str] = None):
-        shared_params = {"root": self.root_dir, "download": True}
+        shared_params = {"root": self.root_dir, "download": True, "classes_count": self.num_classes}
 
         self.train = CIFAR10Pair(samples_per_class=self.train_samples_per_class, train=True, transform=self.train_transform, **shared_params)
         self.val = CIFAR10Pair(train=False, transform=self.test_transform, **shared_params)
