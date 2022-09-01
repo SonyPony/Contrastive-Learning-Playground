@@ -61,10 +61,12 @@ def main(cfg: DictConfig):
     # saving the best model
     model_checkpoint = ModelCheckpoint(monitor="val/acc-1", mode="min")
 
-    # TODO logger and strategy
     trainer = pl.Trainer(
-        gpus=cfg.train.gpus,
+        devices=cfg.train.gpus,
         logger=logger,
+        accelerator="gpu",
+        auto_select_gpus=True,
+        check_val_every_n_epoch=None,
         strategy=DDPPlugin(find_unused_parameters=False),
         callbacks=[
             model_checkpoint

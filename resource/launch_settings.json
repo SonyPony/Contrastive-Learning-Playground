@@ -1,0 +1,20 @@
+{
+  "overrides": {
+    "args": [
+      "train.optimizer.lr=0.01",
+      "train.gpus=\"[0]\"",
+      "data.dataset.train_samples_per_class=5000"
+    ]
+  },
+  "docker": {
+    "docker_image": "clp",
+    "args": {
+      "gpus": "all",
+      "v": [
+        "~/projects/contrastive-learning-playground/data:/app/data",
+        "~/projects/contrastive-learning-playground/src:/app/src",
+        "~/projects/contrastive-learning-playground/experiment:/app/experiment"
+      ]
+    }
+  }
+}
