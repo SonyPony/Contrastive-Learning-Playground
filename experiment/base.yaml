@@ -21,7 +21,7 @@ train:
     val_check_interval: 250
 
   optimizer:
-    lr: 1e-3
+    lr: 1e-2
     weight_decay: 1e-6
 
   loss:

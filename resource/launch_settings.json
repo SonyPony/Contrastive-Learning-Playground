@@ -1,7 +1,6 @@
 {
   "overrides": {
     "args": [
-      "train.optimizer.lr=0.01",
       "train.gpus=\"[0]\"",
       "data.dataset.train_samples_per_class=5000"
     ]
