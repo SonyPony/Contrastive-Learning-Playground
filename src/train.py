@@ -2,6 +2,7 @@ import pytorch_lightning as pl
 import hydra
 import torch
 import torchvision.transforms as transforms
+import transform as T
 
 from omegaconf import DictConfig
 from pytorch_lightning.plugins import DDPPlugin
@@ -33,11 +34,22 @@ def main(cfg: DictConfig):
     # prepare dataset module
     data_module = LightningDatasetWrapper(
         train_transform=transforms.Compose([
-            transforms.RandomResizedCrop(32),
-            transforms.ToTensor()
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            T.GaussianBlur(kernel_size=int(0.1 * 32)),
+            transforms.ToTensor(),
+            # For STL10
+            # transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
+            # For CIFAR10
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
         ]),
         test_transform=transforms.Compose([
-            transforms.ToTensor()
+            transforms.ToTensor(),
+            # For STL10
+            # transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
+            # For CIFAR10
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
         ]),
         **cfg.data.dataset
     )
