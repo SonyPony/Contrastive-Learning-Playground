@@ -67,11 +67,13 @@ class CIFAR10Pair(CIFAR10):
 
 
 @dataclass
-class LightningDatasetWrapper(pl.LightningDataModule):
+class DatasetBase(pl.LightningDataModule):
     root_dir: str
     data_loader: ExDict
     train_samples_per_class: int
-    num_classes: int    # TODO pass to datasets
+    num_classes: int  # TODO pass to datasets
+    supervised: bool
+    false_positive_perc: float
 
     train_transform: Optional[Callable] = None
     test_transform: Optional[Callable] = None
@@ -83,12 +85,16 @@ class LightningDatasetWrapper(pl.LightningDataModule):
     def __post_init__(self):
         super().__init__()
 
+
+@dataclass
+class LightningDatasetWrapper(DatasetBase):
     def setup(self, stage: Optional[str] = None):
         shared_params = {"root_dir": self.root_dir, "classes_count": self.num_classes}
         #shared_params = {"root": self.root_dir, "download": True, "classes_count": self.num_classes}
 
         self.train = TinyImageNetPair(
             samples_per_class=self.train_samples_per_class,
+            classes_count=self.num_classes,
             subset_type=SubsetType.TRAIN,
             transform=self.train_transform,
             **shared_params
@@ -119,25 +125,20 @@ class LightningDatasetWrapper(pl.LightningDataModule):
         return DataLoader(self.memory_bank, shuffle=False, **self.data_loader)
 
     def train_dataloader(self):
+        if self.supervised or self.false_positive_perc is None:
+            return DataLoader(self.train, shuffle=True, **self.data_loader)
+
         return DataLoader(
             self.train,
-            #shuffle=True,
             batch_sampler=SSSampler(
                 batch_size=self.data_loader.get("batch_size"),
-                samples_per_class=self.train.samples_per_class,
-                classes_count=self.train.classes_count,
-                false_negative_perc=0.9,  # TODO
+                samples_per_class=self.train_samples_per_class,
+                classes_count=self.num_classes,
+                false_negative_perc=self.false_positive_perc,
                 drop_last=self.data_loader.get("drop_last")
             ),
-            #batch_sampler=BatchSampler(
-            #    sampler=SequentialSampler(self.train),
-            #    batch_size=8,
-            #    drop_last=True
-            #),
-            # TODO cfg
-            pin_memory=True,
+            pin_memory=self.data_loader.get("pin_memory"),
             num_workers=self.data_loader.get("num_workers")
-            #**self.data_loader
         )
 
     def val_dataloader(self):

@@ -42,6 +42,7 @@ def main(cfg: DictConfig):
 
     # prepare dataset module
     data_module = LightningDatasetWrapper(
+        supervised=cfg.train.supervised,
         train_transform=transforms.Compose([
             transforms.Resize(256, interpolation=InterpolationMode.BICUBIC),
             transforms.RandomResizedCrop(224),

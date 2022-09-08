@@ -9,6 +9,7 @@ data:
     root_dir: ${hydra:runtime.cwd}/../data/tinyimagenet
     train_samples_per_class: null
     num_classes: null
+    false_positive_perc: null
 
     data_loader:
       pin_memory: true
