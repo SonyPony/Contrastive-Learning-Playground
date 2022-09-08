@@ -22,7 +22,7 @@ class TinyImageNet(datasets.ImageFolder):
 
 
 class TinyImageNetPair(TinyImageNet):
-    def __init__(self, root_dir, subset_type: SubsetType, transform = None, class_count: Optional[int] = None, samples_per_class: Optional[int] = None, **kwargs):
+    def __init__(self, root_dir, subset_type: SubsetType, transform = None, classes_count: Optional[int] = None, samples_per_class: Optional[int] = None, **kwargs):
         super().__init__(
             root_dir=root_dir,
             subset_type=subset_type,
@@ -32,19 +32,20 @@ class TinyImageNetPair(TinyImageNet):
 
         targets = np.array(self.targets)
         original_samples_per_class = (targets == 0).sum()
+        original_class_count = len(np.unique(self.targets))
 
-        if samples_per_class or class_count:
-            self.class_count = class_count if class_count else len(np.unique(self.targets))
-            samples_per_class = samples_per_class if samples_per_class else len(self) // self.class_count
+        self.classes_count = classes_count if classes_count else original_class_count
+        self.samples_per_class = samples_per_class if samples_per_class else original_samples_per_class
 
+        if samples_per_class or classes_count:
             assert 0 < samples_per_class <= original_samples_per_class
 
             data = list()
 
-            for i in range(self.class_count):
+            for i in range(self.classes_count):
                 start_idx = original_samples_per_class * i
                 data.extend(self.samples[start_idx:start_idx + samples_per_class])
-            self.targets = np.array(range(self.class_count)).repeat(samples_per_class).tolist()
+            self.targets = np.array(range(self.classes_count)).repeat(samples_per_class).tolist()
             self.samples = data
             self.imgs = self.samples
 

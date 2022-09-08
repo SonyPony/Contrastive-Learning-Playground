@@ -2,8 +2,10 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torchmetrics
+import torch.nn.functional as F
 
-from torch.optim import Adam
+from torch.optim import Adam, SGD
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from termcolor import cprint
 from typing import Dict
 from util import ExDict
@@ -22,10 +24,12 @@ class LightningModelWrapper(pl.LightningModule):
         self,
         model: nn.Module,
         optim_parameters: Dict,
+        experiment_cfg: ExDict,
         batch_size: int,
         temperature: float = 0.5,
         tau_plus: float = 0.0,
-        debiased: bool = False
+        debiased: bool = False,
+        supervised: bool = False
     ):
         super().__init__()
 
@@ -35,6 +39,9 @@ class LightningModelWrapper(pl.LightningModule):
         self.optim_parameters = optim_parameters
         self.batch_size = batch_size
         self.debiased = debiased
+        self.experiment_cfg = experiment_cfg
+        self.supervised = supervised
+        print(f"Mode Supervised: {self.supervised}")
 
         self.val_acc_t_1 = torchmetrics.Accuracy()
         self.val_acc_t_5 = torchmetrics.Accuracy(top_k=5)
@@ -43,6 +50,9 @@ class LightningModelWrapper(pl.LightningModule):
         self.feature_labels = None
 
         self.save_hyperparameters(ignore="model")
+
+    def supervised_loss(self, prediction: torch.Tensor, target: torch.Tensor):
+        return F.cross_entropy(prediction, target)
 
     def loss(self, projected_a: torch.Tensor, projected_b: torch.Tensor):
         samples_count = 2 * self.batch_size
@@ -75,47 +85,54 @@ class LightningModelWrapper(pl.LightningModule):
     def forward(self, x):
         return self.model(x)
 
-
     def training_step(self, batch, batch_idx):
         pos_a, pos_b, label = batch
         _, projected_a = self.model(pos_a)
-        _, projected_b = self.model(pos_b)
 
-        return self.loss(projected_a, projected_b)
+        if not self.supervised:
+            _, projected_b = self.model(pos_b)
+            return self.loss(projected_a, projected_b)
+        # otherwise it's supervised mode
+        return self.supervised_loss(prediction=projected_a, target=label)
 
     def validation_step(self, batch, batch_idx):
-        sim_samples_count = 128     # number of most similar samples
         sample, _, sample_label = batch
-        batch_size = sample.size(0)
-
         # get sample features
-        sample_feature, _ = self.model(sample)
+        sample_feature, projected_features = self.model(sample)
 
-        # compute the similarity of the sample to the feature bank
-        # [B, N] - B is the batch size, N is the memory bank size
-        sim_matrix = torch.mm(sample_feature, self.feature_bank)
+        if self.supervised:
+            pred_scores = F.softmax(projected_features, dim=1)
 
-        # get 'k' most similar samples from the feature bank
-        sim_weight, sim_indices = sim_matrix.topk(k=sim_samples_count, dim=-1)
-        # [B, K]
-        sim_labels = torch.gather(self.feature_labels.expand(batch_size, -1), dim=-1, index=sim_indices)
-        sim_weight = (sim_weight / self.temperature).exp()
+        else:
+            sim_samples_count = 128     # number of most similar samples
+            batch_size = sample.size(0)
 
-        # counts for each class
-        one_hot_label = torch.zeros(sample.size(0) * sim_samples_count, self.class_count, device=self.device)
+            # compute the similarity of the sample to the feature bank
+            # [B, N] - B is the batch size, N is the memory bank size
+            sim_matrix = torch.mm(sample_feature, self.feature_bank)
 
-        # [B*K, C] Creating one hot encoding for flattened feature bank
-        one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1).long(), value=1.0)
+            # get 'k' most similar samples from the feature bank
+            sim_weight, sim_indices = sim_matrix.topk(k=sim_samples_count, dim=-1)
+            # [B, K]
+            sim_labels = torch.gather(self.feature_labels.expand(batch_size, -1), dim=-1, index=sim_indices)
+            sim_weight = (sim_weight / self.temperature).exp()
 
-        # weighted score ---> [B, C] - weightning classes based on the similarity
-        pred_scores = torch.sum(one_hot_label.view(sample.size(0), -1, self.class_count) * sim_weight[..., None], dim=1)
+            # counts for each class
+            one_hot_label = torch.zeros(sample.size(0) * sim_samples_count, self.class_count, device=self.device)
+
+            # [B*K, C] Creating one hot encoding for flattened feature bank
+            one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1).long(), value=1.0)
+
+            # weighted score ---> [B, C] - weightning classes based on the similarity
+            pred_scores = torch.sum(one_hot_label.view(sample.size(0), -1, self.class_count) * sim_weight[..., None], dim=1)
 
         # compute metrics and log them
         self.val_acc_t_1(pred_scores, sample_label)
-        self.val_acc_t_5(pred_scores, sample_label)
 
+        if self.class_count > 5:
+            self.val_acc_t_5(pred_scores, sample_label)
+            self.log("val/acc-5", self.val_acc_t_5)
         self.log("val/acc-1", self.val_acc_t_1)
-        self.log("val/acc-5", self.val_acc_t_5)
 
     def on_validation_epoch_start(self):
         """
@@ -129,7 +146,9 @@ class LightningModelWrapper(pl.LightningModule):
         # create features database
         #cprint("Computing memory bank...", color="yellow")
         memory_dl = self.trainer.datamodule.memory_bank_data_loader()
-        self.class_count = len(memory_dl.dataset.classes)
+        self.class_count = memory_dl.dataset.classes_count
+        if self.supervised:
+            return
 
         for data, _, label in memory_dl:
             feature, _ = self.model(data.to(self.device, non_blocking=True))
@@ -148,7 +167,11 @@ class LightningModelWrapper(pl.LightningModule):
         self.feature_labels = None
 
     def configure_optimizers(self):
-        return Adam(self.parameters(), **self.optim_parameters)
+        optim = Adam(self.parameters(), **self.optim_parameters)
+        scheduler = CosineAnnealingLR(optim, T_max=200)
+
+        return [optim], [scheduler]
+        #return Adam(self.parameters(), **self.optim_parameters)
 
     def merge_state_dict(self, state_dict: Dict):
         model_state_dict = self.state_dict()

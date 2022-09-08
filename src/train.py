@@ -2,7 +2,10 @@ import pytorch_lightning as pl
 import hydra
 import torch
 import torchvision.transforms as transforms
+from torchvision.transforms import InterpolationMode
+
 import transform as T
+import sys
 
 from omegaconf import DictConfig
 from pytorch_lightning.plugins import DDPPlugin
@@ -19,37 +22,48 @@ def main(cfg: DictConfig):
     pl.seed_everything(42)
     torch.multiprocessing.set_sharing_strategy('file_system')
 
+    if not sys.platform == "win32":
+        from safe_gpu import safe_gpu
+        safe_gpu.GPUOwner()
+
     # load experiment parameters
     cfg = ExperimentLoader.load_data(cfg)
 
     # create model
-    model = BaseModel(**cfg.model)
+    model = BaseModel(supervised=cfg.train.supervised, **cfg.model)
     wrapped_model = LightningModelWrapper(
         model=model,
         batch_size=cfg.data.dataset.data_loader.batch_size,
         optim_parameters=cfg.train.optimizer,
+        experiment_cfg=cfg,
+        supervised=cfg.train.supervised,
         **cfg.train.loss
     )
 
     # prepare dataset module
     data_module = LightningDatasetWrapper(
         train_transform=transforms.Compose([
+            transforms.Resize(256, interpolation=InterpolationMode.BICUBIC),
+            transforms.RandomResizedCrop(224),
             transforms.RandomHorizontalFlip(p=0.5),
             transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
             transforms.RandomGrayscale(p=0.2),
             T.GaussianBlur(kernel_size=int(0.1 * 32)),
             transforms.ToTensor(),
             # For STL10
-            # transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
+            #transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
             # For CIFAR10
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+            #transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+            transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
         ]),
         test_transform=transforms.Compose([
+            transforms.Resize(224, interpolation=InterpolationMode.BICUBIC),
             transforms.ToTensor(),
             # For STL10
-            # transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
+            #transforms.Normalize([0.4914, 0.4822, 0.4465], [0.2023, 0.1994, 0.2010])
             # For CIFAR10
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+            #transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+            transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
         ]),
         **cfg.data.dataset
     )
@@ -67,6 +81,7 @@ def main(cfg: DictConfig):
         accelerator="gpu",
         auto_select_gpus=True,
         check_val_every_n_epoch=None,
+        replace_sampler_ddp=False,
         strategy=DDPPlugin(find_unused_parameters=False),
         callbacks=[
             model_checkpoint

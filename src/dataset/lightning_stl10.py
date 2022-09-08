@@ -2,13 +2,15 @@ import pytorch_lightning as pl
 import torch
 import numpy as np
 
+from .ss_sampler import SSSampler
 from PIL import Image
 from dataclasses import dataclass, field
 from torchvision.datasets import STL10, CIFAR10, VisionDataset
 from torchvision import transforms
 from typing import Callable, Optional
 from util import ExDict
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, BatchSampler, SequentialSampler
+from .tinyimagenet import TinyImageNetPair, SubsetType
 
 
 class STL10Pair(STL10):
@@ -35,15 +37,16 @@ class CIFAR10Pair(CIFAR10):
         targets = np.array(self.targets)
         original_samples_per_class = (targets == 0).sum()
 
-        if samples_per_class:
+        if samples_per_class or classes_count:
+            self.class_count = classes_count if classes_count else len(self.classes)
+            samples_per_class = samples_per_class if samples_per_class else len(self) // len(self.classes)
+
             assert 0 < samples_per_class <= original_samples_per_class
 
             # sort by class id
             # 0, 1, 1, 3, 2 -> 0, 1, 1, 2, 3 (class indices) -> 0, 1, 2, 5, 4 (samples indices)
             sorted_samples_indices = targets.argsort()
             data = list()
-            if not classes_count:
-                classes_count = len(self.classes)
 
             # sample first N samples from each class
             for i in range(classes_count):
@@ -81,11 +84,33 @@ class LightningDatasetWrapper(pl.LightningDataModule):
         super().__init__()
 
     def setup(self, stage: Optional[str] = None):
-        shared_params = {"root": self.root_dir, "download": True, "classes_count": self.num_classes}
+        shared_params = {"root_dir": self.root_dir, "classes_count": self.num_classes}
+        #shared_params = {"root": self.root_dir, "download": True, "classes_count": self.num_classes}
 
-        self.train = CIFAR10Pair(samples_per_class=self.train_samples_per_class, train=True, transform=self.train_transform, **shared_params)
-        self.val = CIFAR10Pair(train=False, transform=self.test_transform, **shared_params)
-        self.memory_bank = CIFAR10Pair(samples_per_class=50, train=True, transform=self.test_transform, **shared_params)
+        self.train = TinyImageNetPair(
+            samples_per_class=self.train_samples_per_class,
+            subset_type=SubsetType.TRAIN,
+            transform=self.train_transform,
+            **shared_params
+        )
+
+        self.val = TinyImageNetPair(subset_type=SubsetType.TEST, transform=self.test_transform, **shared_params)
+        self.memory_bank = TinyImageNetPair(
+            samples_per_class=200,
+            subset_type=SubsetType.TRAIN,
+            transform=self.test_transform,
+            **shared_params
+        )
+
+        """self.train = CIFAR10Pair(
+            samples_per_class=self.train_samples_per_class,
+            train=True,
+            transform=self.train_transform,
+            **shared_params
+        )"""
+
+        #self.val = CIFAR10Pair(train=False, transform=self.test_transform, **shared_params)
+        #self.memory_bank = CIFAR10Pair(samples_per_class=200, train=True, transform=self.test_transform, **shared_params)
         #self.train = STL10Pair(split="train+unlabeled", transform=self.train_transform, **shared_params)
         #self.val = STL10Pair(split="test", transform=self.test_transform, **shared_params)
         #self.memory_bank = STL10Pair(split="train", transform=self.test_transform, **shared_params)
@@ -94,7 +119,26 @@ class LightningDatasetWrapper(pl.LightningDataModule):
         return DataLoader(self.memory_bank, shuffle=False, **self.data_loader)
 
     def train_dataloader(self):
-        return DataLoader(self.train, shuffle=True, **self.data_loader)
+        return DataLoader(
+            self.train,
+            #shuffle=True,
+            batch_sampler=SSSampler(
+                batch_size=self.data_loader.get("batch_size"),
+                samples_per_class=self.train.samples_per_class,
+                classes_count=self.train.classes_count,
+                false_negative_perc=0.9,  # TODO
+                drop_last=self.data_loader.get("drop_last")
+            ),
+            #batch_sampler=BatchSampler(
+            #    sampler=SequentialSampler(self.train),
+            #    batch_size=8,
+            #    drop_last=True
+            #),
+            # TODO cfg
+            pin_memory=True,
+            num_workers=self.data_loader.get("num_workers")
+            #**self.data_loader
+        )
 
     def val_dataloader(self):
         return DataLoader(self.val, **self.data_loader)

@@ -1,8 +1,8 @@
 {
   "overrides": {
     "args": [
-      "train.gpus=\"[0]\"",
-      "data.dataset.train_samples_per_class=5000"
+      "train.supervised=false",
+      "data.dataset.data_loader.batch_size=32"
     ]
   },
   "docker": {
