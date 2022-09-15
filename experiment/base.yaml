@@ -35,4 +35,6 @@ train:
     debiased: false
 
 model:
+  wandb_id: null
+  pretrained_path: null
   feature_size: 200

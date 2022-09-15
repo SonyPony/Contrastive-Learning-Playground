@@ -30,7 +30,12 @@ def main(cfg: DictConfig):
     cfg = ExperimentLoader.load_data(cfg)
 
     # create model
-    model = BaseModel(supervised=cfg.train.supervised, **cfg.model)
+    model = BaseModel(
+        classes_count=cfg.data.dataset.num_classes,
+        linear_eval=cfg.train.linear_eval,
+        supervised=cfg.train.supervised,
+        feature_size=cfg.model.feature_size
+    )
     wrapped_model = LightningModelWrapper(
         model=model,
         batch_size=cfg.data.dataset.data_loader.batch_size,
@@ -39,6 +44,7 @@ def main(cfg: DictConfig):
         supervised=cfg.train.supervised,
         **cfg.train.loss
     )
+    wrapped_model.load_model()
 
     # prepare dataset module
     data_module = LightningDatasetWrapper(

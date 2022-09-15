@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import torchmetrics
 import torch.nn.functional as F
+import wandb
+import hydra
 
 from torch.optim import Adam, SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -41,7 +43,7 @@ class LightningModelWrapper(pl.LightningModule):
         self.debiased = debiased
         self.experiment_cfg = experiment_cfg
         self.supervised = supervised
-        print(f"Mode Supervised: {self.supervised}")
+        print(f"Mode Supervised: {self.supervised}, Linear Eval: {experiment_cfg.train.linear_eval}")
 
         self.val_acc_t_1 = torchmetrics.Accuracy()
         self.val_acc_t_5 = torchmetrics.Accuracy(top_k=5)
@@ -196,3 +198,21 @@ class LightningModelWrapper(pl.LightningModule):
         )["state_dict"]
 
         return self.merge_state_dict(loaded_weights)
+
+    def load_model(self):
+        model_params = self.experiment_cfg.model
+        wandb_id = self.experiment_cfg.model.wandb_id
+
+        if wandb_id:  # if wandb id is set, load the model from the wandb cloud
+            cprint(f"Loading wandb: {wandb_id}", color="blue")
+            wandb_api = wandb.Api()
+            run = wandb_api.run(f"sonypony/clp/{wandb_id}")  # 2c0hhzxf")   #xpolnphz
+            model_id = f"model-{run.id}"
+            artifact = wandb_api.artifact(f'sonypony/clp/{model_id}:best_k', type="model")
+            artifact_dir = artifact.download(f"{hydra.utils.get_original_cwd()}/../artifacts/{model_id}")
+            self.merge_pretrained_model(f"{artifact_dir}/model.ckpt")
+
+        # otherwise load it from the local file system
+        elif "pretrained_path" in model_params.keys() and (model_path := model_params["pretrained_path"]):
+            cprint(f"Loading {model_path}", color="blue")
+            self.merge_pretrained_model(model_path)
