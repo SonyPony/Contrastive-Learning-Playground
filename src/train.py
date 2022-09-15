@@ -6,13 +6,16 @@ from torchvision.transforms import InterpolationMode
 
 import transform as T
 import sys
+import wandb
 
 from omegaconf import DictConfig
 from pytorch_lightning.plugins import DDPPlugin
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
 
+from dataset.tinyimagenet import TinyImageNet
 from model import LightningModelWrapper, BaseModel
+from termcolor import cprint
 from util import ExperimentLoader
 from dataset import LightningDatasetWrapper
 
@@ -28,6 +31,9 @@ def main(cfg: DictConfig):
 
     # load experiment parameters
     cfg = ExperimentLoader.load_data(cfg)
+
+    classes_count = cfg.data.dataset.num_classes
+    cfg.data.dataset["num_classes"] = classes_count if classes_count else TinyImageNet.CLASSES_COUNT
 
     # create model
     model = BaseModel(

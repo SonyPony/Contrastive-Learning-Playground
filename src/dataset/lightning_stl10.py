@@ -94,7 +94,6 @@ class LightningDatasetWrapper(DatasetBase):
 
         self.train = TinyImageNetPair(
             samples_per_class=self.train_samples_per_class,
-            classes_count=self.num_classes,
             subset_type=SubsetType.TRAIN,
             transform=self.train_transform,
             **shared_params
@@ -132,8 +131,8 @@ class LightningDatasetWrapper(DatasetBase):
             self.train,
             batch_sampler=SSSampler(
                 batch_size=self.data_loader.get("batch_size"),
-                samples_per_class=self.train_samples_per_class,
-                classes_count=self.num_classes,
+                samples_per_class=self.train.samples_per_class,
+                classes_count=self.train.classes_count,
                 false_negative_perc=self.false_positive_perc,
                 drop_last=self.data_loader.get("drop_last")
             ),

@@ -19,6 +19,7 @@ data:
 
 train:
   gpus: 1
+  linear_eval: false
   supervised: true
   trainer:
     max_steps: 120000

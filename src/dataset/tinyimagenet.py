@@ -13,6 +13,8 @@ class SubsetType(Enum):
 
 
 class TinyImageNet(datasets.ImageFolder):
+    CLASSES_COUNT = 200
+
     def __init__(self, root_dir: str, subset_type: SubsetType, transform = None, **kwargs):
         super().__init__(
             root=f"{root_dir}/{subset_type.value}",
@@ -37,15 +39,15 @@ class TinyImageNetPair(TinyImageNet):
         self.classes_count = classes_count if classes_count else original_class_count
         self.samples_per_class = samples_per_class if samples_per_class else original_samples_per_class
 
-        if samples_per_class or classes_count:
-            assert 0 < samples_per_class <= original_samples_per_class
+        if self.samples_per_class or self.classes_count:
+            assert 0 < self.samples_per_class <= original_samples_per_class
 
             data = list()
 
             for i in range(self.classes_count):
                 start_idx = original_samples_per_class * i
-                data.extend(self.samples[start_idx:start_idx + samples_per_class])
-            self.targets = np.array(range(self.classes_count)).repeat(samples_per_class).tolist()
+                data.extend(self.samples[start_idx:start_idx + self.samples_per_class])
+            self.targets = np.array(range(self.classes_count)).repeat(self.samples_per_class).tolist()
             self.samples = data
             self.imgs = self.samples
 
