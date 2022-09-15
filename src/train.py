@@ -80,7 +80,7 @@ def main(cfg: DictConfig):
     logger.experiment.log_code(hydra.utils.get_original_cwd())
 
     # saving the best model
-    model_checkpoint = ModelCheckpoint(monitor="val/acc-1", mode="min")
+    model_checkpoint = ModelCheckpoint(monitor="val/acc-1", mode="max")
 
     trainer = pl.Trainer(
         devices=cfg.train.gpus,
