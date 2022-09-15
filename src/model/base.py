@@ -25,30 +25,36 @@ class BaseModel(nn.Module):
 
         # init projection head
         lin_features_size = 512
-        self.projection_head = nn.Sequential(
-            # 2048
-            nn.Linear(in_features=512, out_features=lin_features_size, bias=False),
-            nn.BatchNorm1d(num_features=lin_features_size),
-            nn.ReLU(inplace=True),
-            nn.Linear(in_features=lin_features_size, out_features=feature_size, bias=True)
-        )
 
+        # TODO Xor linear eval supervised
         if self.linear_eval:
             self.classifier = nn.Linear(in_features=lin_features_size, out_features=classes_count)
-            self.encoder.requires_grad_(False)
-            self.projection_head.requires_grad_(False)
 
-        #if supervised:
-        #    self.projection_head.append(nn.Softmax())
+        if not self.linear_eval:
+            self.projection_head = nn.Sequential(
+                # 2048
+                nn.Linear(in_features=512, out_features=lin_features_size, bias=False),
+                nn.BatchNorm1d(num_features=lin_features_size),
+                nn.ReLU(inplace=True),
+                nn.Linear(in_features=lin_features_size, out_features=feature_size, bias=True)
+            )
 
     def forward(self, x):
         features = self.encoder(x)
         features = torch.flatten(features, start_dim=1)
 
-        projected = self.projection_head(features)
+        if not self.linear_eval:
+            projected = self.projection_head(features)
+
         if self.supervised:
             if self.linear_eval:
-                return self.classifier(features), projected
+                return None, self.classifier(features)
             return F.normalize(features, dim=-1), projected
 
+        # unsupervised
         return F.normalize(features, dim=-1), F.normalize(projected, dim=-1)
+
+    """def parameters(self, recurse: bool = True):
+        if not self.linear_eval:
+            return super().parameters(recurse)
+        return self.classifier.parameters(recurse)"""

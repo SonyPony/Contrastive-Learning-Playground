@@ -173,7 +173,6 @@ class LightningModelWrapper(pl.LightningModule):
         scheduler = CosineAnnealingLR(optim, T_max=200)
 
         return [optim], [scheduler]
-        #return Adam(self.parameters(), **self.optim_parameters)
 
     def merge_state_dict(self, state_dict: Dict):
         model_state_dict = self.state_dict()

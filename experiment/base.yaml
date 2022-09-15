@@ -14,7 +14,7 @@ data:
     data_loader:
       pin_memory: true
       num_workers: 8
-      batch_size: 256
+      batch_size: 32
       drop_last: true
 
 train:
@@ -38,4 +38,4 @@ train:
 model:
   wandb_id: null
   pretrained_path: null
-  feature_size: 200
+  feature_size: 200   # should be num_class in supervised
