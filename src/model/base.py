@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from util.nn_module import freeze_model
 from torchvision.models.resnet import resnet50, resnet18
 
 
@@ -29,6 +30,7 @@ class BaseModel(nn.Module):
         # TODO Xor linear eval supervised
         if self.linear_eval:
             self.classifier = nn.Linear(in_features=lin_features_size, out_features=classes_count)
+            freeze_model(self.encoder)
 
         if not self.linear_eval:
             self.projection_head = nn.Sequential(
