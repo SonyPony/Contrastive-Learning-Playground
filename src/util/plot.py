@@ -29,12 +29,12 @@ def set_style():
         plt.rcParams[f"{axis}tick.labelcolor"] = axes_textcolor
         plt.rcParams[f"{axis}tick.labelsize"] = 17#12
 
-    plt.rcParams["legend.fontsize"] = 14
+    plt.rcParams["legend.fontsize"] = 17
     plt.rcParams["legend.labelcolor"] = title_color
     plt.rcParams["legend.frameon"] = False
     plt.rcParams["legend.loc"] = "upper center"
 
-    plt.rcParams["figure.subplot.top"] = 0.95
+    plt.rcParams["figure.subplot.top"] = 0.90
     plt.rcParams["figure.subplot.bottom"] = 0.23
     plt.rcParams["figure.subplot.right"] = 0.98
     plt.rcParams["figure.subplot.left"] = 0.15
