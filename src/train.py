@@ -82,7 +82,7 @@ def main(cfg: DictConfig):
     )
 
     # define wandb logger
-    logger = WandbLogger(project="clp", save_code=True, save_dir=cfg.log.dir, log_model="all")   # NOQA
+    logger = WandbLogger(project="clp", save_code=True, save_dir=cfg.log.dir, log_model="all", notes=cfg.log.notes)   # NOQA
     logger.experiment.log_code(hydra.utils.get_original_cwd())
 
     # saving the best model

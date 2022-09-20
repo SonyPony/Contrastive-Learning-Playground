@@ -2,6 +2,7 @@ hydra:
   output_subdir: null
 
 log:
+  notes: ''
   dir: ${hydra:runtime.cwd}/../log
 
 data:
