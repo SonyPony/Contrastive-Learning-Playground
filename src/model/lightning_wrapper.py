@@ -212,6 +212,7 @@ class LightningModelWrapper(pl.LightningModule):
             self.merge_pretrained_model(f"{artifact_dir}/model.ckpt")
 
         # otherwise load it from the local file system
-        elif "pretrained_path" in model_params.keys() and (model_path := model_params["pretrained_path"]):
+        elif "pretrained_path" in model_params.keys() and model_params["pretrained_path"]:
+            model_path = model_params["pretrained_path"]
             cprint(f"Loading {model_path}", color="blue")
             self.merge_pretrained_model(model_path)
