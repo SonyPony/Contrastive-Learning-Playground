@@ -32,16 +32,21 @@ class SSSampler(Sampler[List[int]]):
             samples = list()
 
             for i in range(self.batch_size):
+                empty_classes = set([i for i in structured_indices.keys() if not len(structured_indices[i])])
+                unused_classes = list(classes - (used_classes | empty_classes))
+
                 # false negative ratio cannot be holded
-                if not all([len(structured_indices[i]) for i in structured_indices.keys()]):
+                # TODO check
+                if len(unused_classes) <= 1:
+                    #all([len(structured_indices[i]) for i in structured_indices.keys()]):
                     flattened_indices = list(chain.from_iterable(structured_indices.values()))
                     sample_idx = random.choice(flattened_indices)
                     samples.append(sample_idx)
                     continue
 
-                unused_classes = list(classes - used_classes)
-                if self.false_negative_perc > random.random() and len(used_classes):     # create a false negative
-                    class_idx = random.choice(list(used_classes))
+                if self.false_negative_perc > random.random() and len(used_classes - empty_classes):     # create a false negative
+                    # false negative -> it's already in the list of used classes
+                    class_idx = random.choice(list(used_classes - empty_classes))
 
                 else:   # true negative
                     class_idx = random.choice(unused_classes)
