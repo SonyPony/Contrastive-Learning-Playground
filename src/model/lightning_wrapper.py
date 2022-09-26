@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import wandb
 import hydra
 
+from .loss import SupConLoss
 from torch.optim import Adam, SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from termcolor import cprint
@@ -43,7 +44,10 @@ class LightningModelWrapper(pl.LightningModule):
         self.debiased = debiased
         self.experiment_cfg = experiment_cfg
         self.supervised = supervised
-        print(f"Mode Supervised: {self.supervised}, Linear Eval: {experiment_cfg.train.linear_eval}")
+        if self.supervised:
+            self.supervised_loss = SupConLoss() #temperature=self.temperature)
+
+        print(f"Debiased: {self.debiased}, Mode Supervised: {self.supervised}, Linear Eval: {experiment_cfg.train.linear_eval}")
 
         self.val_acc_t_1 = torchmetrics.Accuracy()
         self.val_acc_t_5 = torchmetrics.Accuracy(top_k=5)
@@ -52,9 +56,6 @@ class LightningModelWrapper(pl.LightningModule):
         self.feature_labels = None
 
         self.save_hyperparameters(ignore="model")
-
-    def supervised_loss(self, prediction: torch.Tensor, target: torch.Tensor):
-        return F.cross_entropy(prediction, target)
 
     def loss(self, projected_a: torch.Tensor, projected_b: torch.Tensor):
         samples_count = 2 * self.batch_size
@@ -90,12 +91,16 @@ class LightningModelWrapper(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         pos_a, pos_b, label = batch
         _, projected_a = self.model(pos_a)
+        _, projected_b = self.model(pos_b)
 
         if not self.supervised:
-            _, projected_b = self.model(pos_b)
             return self.loss(projected_a, projected_b)
+
         # otherwise it's supervised mode
-        return self.supervised_loss(prediction=projected_a, target=label)
+        # add dimension (B, 1, N), where B is the batch size and N is the number of features/classes
+        projected_samples = torch.cat((projected_a, projected_b))
+        label = torch.cat((label, label))
+        return self.supervised_loss(projected_samples[:, None, ...], label, device=self.device)
 
     def validation_step(self, batch, batch_idx):
         sample, _, sample_label = batch

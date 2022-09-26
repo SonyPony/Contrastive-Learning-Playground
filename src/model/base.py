@@ -48,15 +48,8 @@ class BaseModel(nn.Module):
         if not self.linear_eval:
             projected = self.projection_head(features)
 
-        if self.supervised:
-            if self.linear_eval:
-                return None, self.classifier(features)
-            return F.normalize(features, dim=-1), projected
+        if self.supervised and self.linear_eval:
+            return None, self.classifier(features)
 
         # unsupervised
         return F.normalize(features, dim=-1), F.normalize(projected, dim=-1)
-
-    """def parameters(self, recurse: bool = True):
-        if not self.linear_eval:
-            return super().parameters(recurse)
-        return self.classifier.parameters(recurse)"""
