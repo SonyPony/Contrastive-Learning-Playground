@@ -72,7 +72,6 @@ class DatasetBase(pl.LightningDataModule):
     data_loader: ExDict
     train_samples_per_class: int
     num_classes: int  # TODO pass to datasets
-    supervised: bool
     false_positive_perc: float
 
     train_transform: Optional[Callable] = None
@@ -124,7 +123,7 @@ class LightningDatasetWrapper(DatasetBase):
         return DataLoader(self.memory_bank, shuffle=False, **self.data_loader)
 
     def train_dataloader(self):
-        if self.supervised or self.false_positive_perc is None:
+        if self.false_positive_perc is None:
             return DataLoader(self.train, shuffle=True, **self.data_loader)
 
         return DataLoader(

@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import wandb
 import hydra
 
+from common.training_type import TrainingType
 from .loss import SupConLoss
 from torch.optim import Adam, SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -29,10 +30,10 @@ class LightningModelWrapper(pl.LightningModule):
         optim_parameters: Dict,
         experiment_cfg: ExDict,
         batch_size: int,
+        training_type: TrainingType,
         temperature: float = 0.5,
         tau_plus: float = 0.0,
         debiased: bool = False,
-        supervised: bool = False
     ):
         super().__init__()
 
@@ -43,11 +44,14 @@ class LightningModelWrapper(pl.LightningModule):
         self.batch_size = batch_size
         self.debiased = debiased
         self.experiment_cfg = experiment_cfg
-        self.supervised = supervised
-        if self.supervised:
-            self.supervised_loss = SupConLoss() #temperature=self.temperature)
+        self.training_type = training_type
 
-        print(f"Debiased: {self.debiased}, Mode Supervised: {self.supervised}, Linear Eval: {experiment_cfg.train.linear_eval}")
+        if self.training_type == TrainingType.SUPERVISED_CONTRASTIVE:
+            self.sup_con_loss = SupConLoss() #temperature=self.temperature)
+        elif self.training_type == TrainingType.LINEAR_EVAL:
+            self.sup_loss = nn.CrossEntropyLoss()
+
+        print(f"Debiased: {self.debiased}, Mode: {self.training_type}")
 
         self.val_acc_t_1 = torchmetrics.Accuracy()
         self.val_acc_t_5 = torchmetrics.Accuracy(top_k=5)
@@ -57,7 +61,7 @@ class LightningModelWrapper(pl.LightningModule):
 
         self.save_hyperparameters(ignore="model")
 
-    def loss(self, projected_a: torch.Tensor, projected_b: torch.Tensor):
+    def ss_con_loss(self, projected_a: torch.Tensor, projected_b: torch.Tensor):
         samples_count = 2 * self.batch_size
 
         # neg score
@@ -91,47 +95,53 @@ class LightningModelWrapper(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         pos_a, pos_b, label = batch
         _, projected_a = self.model(pos_a)
+        if self.training_type == TrainingType.LINEAR_EVAL:   # linear eval
+            return self.sup_loss(projected_a, label)
+
+        # compute augmented view
         _, projected_b = self.model(pos_b)
 
-        if not self.supervised:
-            return self.loss(projected_a, projected_b)
+        if self.training_type == TrainingType.SELF_SUPERVISED_CONTRASTIVE:
+            return self.ss_con_loss(projected_a, projected_b)
 
-        # otherwise it's supervised mode
-        # add dimension (B, 1, N), where B is the batch size and N is the number of features/classes
-        projected_samples = torch.cat((projected_a, projected_b))
-        label = torch.cat((label, label))
-        return self.supervised_loss(projected_samples[:, None, ...], label, device=self.device)
+        else:   # otherwise it's supervised contrastive
+            # add dimension (B, 1, N), where B is the batch size and N is the number of features/classes
+            projected_samples = torch.cat((projected_a, projected_b))
+            label = torch.cat((label, label))
+            return self.sup_con_loss(projected_samples[:, None, ...], label, device=self.device)
+
+
 
     def validation_step(self, batch, batch_idx):
         sample, _, sample_label = batch
         # get sample features
         sample_feature, projected_features = self.model(sample)
 
-        #if self.supervised:
-        #    pred_scores = F.softmax(projected_features, dim=1)
+        if self.training_type == TrainingType.LINEAR_EVAL:
+            pred_scores = F.softmax(projected_features, dim=1)
 
-        #else:
-        sim_samples_count = 128     # number of most similar samples
-        batch_size = sample.size(0)
+        else:
+            sim_samples_count = 128     # number of most similar samples
+            batch_size = sample.size(0)
 
-        # compute the similarity of the sample to the feature bank
-        # [B, N] - B is the batch size, N is the memory bank size
-        sim_matrix = torch.mm(sample_feature, self.feature_bank)
+            # compute the similarity of the sample to the feature bank
+            # [B, N] - B is the batch size, N is the memory bank size
+            sim_matrix = torch.mm(sample_feature, self.feature_bank)
 
-        # get 'k' most similar samples from the feature bank
-        sim_weight, sim_indices = sim_matrix.topk(k=sim_samples_count, dim=-1)
-        # [B, K]
-        sim_labels = torch.gather(self.feature_labels.expand(batch_size, -1), dim=-1, index=sim_indices)
-        sim_weight = (sim_weight / self.temperature).exp()
+            # get 'k' most similar samples from the feature bank
+            sim_weight, sim_indices = sim_matrix.topk(k=sim_samples_count, dim=-1)
+            # [B, K]
+            sim_labels = torch.gather(self.feature_labels.expand(batch_size, -1), dim=-1, index=sim_indices)
+            sim_weight = (sim_weight / self.temperature).exp()
 
-        # counts for each class
-        one_hot_label = torch.zeros(sample.size(0) * sim_samples_count, self.class_count, device=self.device)
+            # counts for each class
+            one_hot_label = torch.zeros(sample.size(0) * sim_samples_count, self.class_count, device=self.device)
 
-        # [B*K, C] Creating one hot encoding for flattened feature bank
-        one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1).long(), value=1.0)
+            # [B*K, C] Creating one hot encoding for flattened feature bank
+            one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1).long(), value=1.0)
 
-        # weighted score ---> [B, C] - weightning classes based on the similarity
-        pred_scores = torch.sum(one_hot_label.view(sample.size(0), -1, self.class_count) * sim_weight[..., None], dim=1)
+            # weighted score ---> [B, C] - weightning classes based on the similarity
+            pred_scores = torch.sum(one_hot_label.view(sample.size(0), -1, self.class_count) * sim_weight[..., None], dim=1)
 
         # compute metrics and log them
         self.val_acc_t_1(pred_scores, sample_label)
@@ -154,8 +164,8 @@ class LightningModelWrapper(pl.LightningModule):
         #cprint("Computing memory bank...", color="yellow")
         memory_dl = self.trainer.datamodule.memory_bank_data_loader()
         self.class_count = memory_dl.dataset.classes_count
-        #if self.supervised:
-        #    return
+        if self.training_type == TrainingType.LINEAR_EVAL:
+            return
 
         for data, _, label in memory_dl:
             feature, _ = self.model(data.to(self.device, non_blocking=True))

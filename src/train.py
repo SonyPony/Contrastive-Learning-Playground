@@ -15,7 +15,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from dataset.tinyimagenet import TinyImageNet
 from model import LightningModelWrapper, BaseModel
-from termcolor import cprint
+from common.training_type import TrainingType
 from util import ExperimentLoader
 from dataset import LightningDatasetWrapper
 
@@ -34,12 +34,12 @@ def main(cfg: DictConfig):
 
     classes_count = cfg.data.dataset.num_classes
     cfg.data.dataset["num_classes"] = classes_count if classes_count else TinyImageNet.CLASSES_COUNT
+    training_type = TrainingType(cfg.train.type)
 
     # create model
     model = BaseModel(
         classes_count=cfg.data.dataset.num_classes,
-        linear_eval=cfg.train.linear_eval,
-        supervised=cfg.train.supervised,
+        training_type=training_type,
         feature_size=cfg.model.feature_size
     )
     wrapped_model = LightningModelWrapper(
@@ -47,14 +47,13 @@ def main(cfg: DictConfig):
         batch_size=cfg.data.dataset.data_loader.batch_size,
         optim_parameters=cfg.train.optimizer,
         experiment_cfg=cfg,
-        supervised=cfg.train.supervised,
+        training_type=training_type,
         **cfg.train.loss
     )
     wrapped_model.load_model()
 
     # prepare dataset module
     data_module = LightningDatasetWrapper(
-        supervised=cfg.train.supervised,
         train_transform=transforms.Compose([
             transforms.Resize(48, interpolation=InterpolationMode.BICUBIC),
             transforms.RandomResizedCrop(32),

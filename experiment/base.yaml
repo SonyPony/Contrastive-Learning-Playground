@@ -20,8 +20,7 @@ data:
 
 train:
   gpus: 1
-  linear_eval: false
-  supervised: true
+  type: ss_con
   trainer:
     max_steps: 80000
     num_sanity_val_steps: 0
