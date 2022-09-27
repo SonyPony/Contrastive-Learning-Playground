@@ -107,31 +107,31 @@ class LightningModelWrapper(pl.LightningModule):
         # get sample features
         sample_feature, projected_features = self.model(sample)
 
-        if self.supervised:
-            pred_scores = F.softmax(projected_features, dim=1)
+        #if self.supervised:
+        #    pred_scores = F.softmax(projected_features, dim=1)
 
-        else:
-            sim_samples_count = 128     # number of most similar samples
-            batch_size = sample.size(0)
+        #else:
+        sim_samples_count = 128     # number of most similar samples
+        batch_size = sample.size(0)
 
-            # compute the similarity of the sample to the feature bank
-            # [B, N] - B is the batch size, N is the memory bank size
-            sim_matrix = torch.mm(sample_feature, self.feature_bank)
+        # compute the similarity of the sample to the feature bank
+        # [B, N] - B is the batch size, N is the memory bank size
+        sim_matrix = torch.mm(sample_feature, self.feature_bank)
 
-            # get 'k' most similar samples from the feature bank
-            sim_weight, sim_indices = sim_matrix.topk(k=sim_samples_count, dim=-1)
-            # [B, K]
-            sim_labels = torch.gather(self.feature_labels.expand(batch_size, -1), dim=-1, index=sim_indices)
-            sim_weight = (sim_weight / self.temperature).exp()
+        # get 'k' most similar samples from the feature bank
+        sim_weight, sim_indices = sim_matrix.topk(k=sim_samples_count, dim=-1)
+        # [B, K]
+        sim_labels = torch.gather(self.feature_labels.expand(batch_size, -1), dim=-1, index=sim_indices)
+        sim_weight = (sim_weight / self.temperature).exp()
 
-            # counts for each class
-            one_hot_label = torch.zeros(sample.size(0) * sim_samples_count, self.class_count, device=self.device)
+        # counts for each class
+        one_hot_label = torch.zeros(sample.size(0) * sim_samples_count, self.class_count, device=self.device)
 
-            # [B*K, C] Creating one hot encoding for flattened feature bank
-            one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1).long(), value=1.0)
+        # [B*K, C] Creating one hot encoding for flattened feature bank
+        one_hot_label = one_hot_label.scatter(dim=-1, index=sim_labels.view(-1, 1).long(), value=1.0)
 
-            # weighted score ---> [B, C] - weightning classes based on the similarity
-            pred_scores = torch.sum(one_hot_label.view(sample.size(0), -1, self.class_count) * sim_weight[..., None], dim=1)
+        # weighted score ---> [B, C] - weightning classes based on the similarity
+        pred_scores = torch.sum(one_hot_label.view(sample.size(0), -1, self.class_count) * sim_weight[..., None], dim=1)
 
         # compute metrics and log them
         self.val_acc_t_1(pred_scores, sample_label)
@@ -154,8 +154,8 @@ class LightningModelWrapper(pl.LightningModule):
         #cprint("Computing memory bank...", color="yellow")
         memory_dl = self.trainer.datamodule.memory_bank_data_loader()
         self.class_count = memory_dl.dataset.classes_count
-        if self.supervised:
-            return
+        #if self.supervised:
+        #    return
 
         for data, _, label in memory_dl:
             feature, _ = self.model(data.to(self.device, non_blocking=True))
