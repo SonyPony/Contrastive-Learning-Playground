@@ -7,7 +7,7 @@ import wandb
 import hydra
 
 from common.training_type import TrainingType
-from .loss import SupConLoss
+from .loss import SupConLoss, SupConSigLoss
 from torch.optim import Adam, SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from termcolor import cprint
@@ -15,7 +15,13 @@ from typing import Dict
 from util import ExDict
 
 
-def negative_mask(batch_size: int, device) -> torch.Tensor:
+def negative_mask(batch_size: int, device: str) -> torch.Tensor:
+    """
+    Given a batch size, it generates a mask for negative pairs. Given a matrix (batch_size, batch_size),
+    where each sample is compared. It produces True for negative pairs and False for positive pairs.
+    :param batch_size: Original batch size N, not 2N (with augmented)
+    """
+
     mask = torch.ones((batch_size,) * 2, dtype=torch.bool, device=device)
     # remove identity
     mask = torch.logical_xor(mask, torch.eye(batch_size, dtype=torch.bool, device=device))
@@ -46,10 +52,11 @@ class LightningModelWrapper(pl.LightningModule):
         self.experiment_cfg = experiment_cfg
         self.training_type = training_type
 
-        if self.training_type == TrainingType.SUPERVISED_CONTRASTIVE:
-            self.sup_con_loss = SupConLoss() #temperature=self.temperature)
-        elif self.training_type == TrainingType.LINEAR_EVAL:
-            self.sup_loss = nn.CrossEntropyLoss()
+        self.sup_con_loss = SupConLoss()  # temperature=self.temperature)
+        #if self.training_type == TrainingType.SUPERVISED_CONTRASTIVE:
+        #    self.sup_con_loss = SupConLoss() #temperature=self.temperature)
+        #elif self.training_type == TrainingType.LINEAR_EVAL:
+        self.sup_loss = nn.CrossEntropyLoss()
 
         print(f"Debiased: {self.debiased}, Mode: {self.training_type}")
 
@@ -61,7 +68,7 @@ class LightningModelWrapper(pl.LightningModule):
 
         self.save_hyperparameters(ignore="model")
 
-    def ss_con_loss(self, projected_a: torch.Tensor, projected_b: torch.Tensor):
+    def ss_con_loss(self, projected_a: torch.Tensor, projected_b: torch.Tensor, labels=None):
         samples_count = 2 * self.batch_size
 
         # neg score
@@ -100,9 +107,16 @@ class LightningModelWrapper(pl.LightningModule):
 
         # compute augmented view
         _, projected_b = self.model(pos_b)
+        # TODO if the distance between anchor and sample is smaller than projected_a and projected_b it's false negative
+
 
         if self.training_type == TrainingType.SELF_SUPERVISED_CONTRASTIVE:
-            return self.ss_con_loss(projected_a, projected_b)
+            # add dimension (B, 1, N), where B is the batch size and N is the number of features/classes
+            projected_samples = torch.cat((projected_a, projected_b))
+            label = torch.logical_not(negative_mask(self.batch_size, self.device))
+            return self.sup_con_loss(projected_samples[:, None, ...], mask=label, device=self.device)
+
+            #return self.ss_con_loss(projected_a, projected_b)
 
         else:   # otherwise it's supervised contrastive
             # add dimension (B, 1, N), where B is the batch size and N is the number of features/classes
