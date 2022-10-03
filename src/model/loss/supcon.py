@@ -20,7 +20,7 @@ class SupConLoss(nn.Module):
         self.contrast_mode = contrast_mode
         self.base_temperature = base_temperature
 
-    def forward(self, features, labels=None, mask=None, device="cpu"):
+    def forward(self, features, labels=None, mask=None, elimination_mask=None, device="cpu"):
         """Compute loss for model. If both `labels` and `mask` are None,
         it degenerates to SimCLR unsupervised loss:
         https://arxiv.org/pdf/2002.05709.pdf
@@ -81,10 +81,17 @@ class SupConLoss(nn.Module):
             torch.arange(batch_size * anchor_count).view(-1, 1).to(device),
             0
         )
-        mask = mask * logits_mask
+        if elimination_mask is None:
+            elimination_mask = torch.ones_like(logits_mask)
+
+        # TODO here add attraction
+        mask = (torch.logical_or(mask, torch.logical_not(elimination_mask))) * logits_mask
 
         # compute log_prob
-        exp_logits = torch.exp(logits) * logits_mask
+        # mask out self-contrast and elimination
+        exp_logits = tlorch.exp(logits) * logits_mask * elimination_mask
+
+        # log(exp(positive / t)) == positive / t it cancels out
         log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))
 
         # compute mean of log-likelihood over positive

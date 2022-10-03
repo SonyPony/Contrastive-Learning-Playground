@@ -107,14 +107,21 @@ class LightningModelWrapper(pl.LightningModule):
 
         # compute augmented view
         _, projected_b = self.model(pos_b)
+        projected_samples = torch.cat((projected_a, projected_b))
+
         # TODO if the distance between anchor and sample is smaller than projected_a and projected_b it's false negative
+        similarities = torch.mm(projected_samples, projected_samples.t().contiguous())
+        elimination_mask = torch.logical_not(similarities > 0.7).float()
 
 
         if self.training_type == TrainingType.SELF_SUPERVISED_CONTRASTIVE:
             # add dimension (B, 1, N), where B is the batch size and N is the number of features/classes
-            projected_samples = torch.cat((projected_a, projected_b))
             label = torch.logical_not(negative_mask(self.batch_size, self.device))
-            return self.sup_con_loss(projected_samples[:, None, ...], mask=label, device=self.device)
+            return self.sup_con_loss(
+                projected_samples[:, None, ...],
+                mask=label,
+                #elimination_mask=elimination_mask,
+                device=self.device)
 
             #return self.ss_con_loss(projected_a, projected_b)
 
@@ -123,8 +130,6 @@ class LightningModelWrapper(pl.LightningModule):
             projected_samples = torch.cat((projected_a, projected_b))
             label = torch.cat((label, label))
             return self.sup_con_loss(projected_samples[:, None, ...], label, device=self.device)
-
-
 
     def validation_step(self, batch, batch_idx):
         sample, _, sample_label = batch
