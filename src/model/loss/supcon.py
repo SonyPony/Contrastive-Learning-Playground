@@ -9,6 +9,14 @@ from __future__ import print_function
 import torch
 import torch.nn as nn
 
+from enum import Enum
+
+
+class FalseNegMode(Enum):
+    NONE = "none"
+    ELIMINATION = "elimination"
+    ATTRACTION = "attraction"
+
 
 class SupConLoss(nn.Module):
     """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
@@ -20,7 +28,14 @@ class SupConLoss(nn.Module):
         self.contrast_mode = contrast_mode
         self.base_temperature = base_temperature
 
-    def forward(self, features, labels=None, mask=None, elimination_mask=None, device="cpu"):
+    def forward(
+            self,
+            features,
+            labels=None,
+            mask=None,
+            elimination_mask=None,
+            false_neg_mode: FalseNegMode = FalseNegMode.NONE,
+            device="cpu"):
         """Compute loss for model. If both `labels` and `mask` are None,
         it degenerates to SimCLR unsupervised loss:
         https://arxiv.org/pdf/2002.05709.pdf
@@ -30,6 +45,9 @@ class SupConLoss(nn.Module):
             labels: ground truth of shape [bsz].
             mask: contrastive mask of shape [bsz, bsz], mask_{i,j}=1 if sample j
                 has the same class as sample i. Can be asymmetric.
+            elimination_mask: A mask, where 1 stands for a false negative sample or
+            a positive sample, 0 otherwise. Has the same shape as 'mask' parameter.
+
         Returns:
             A loss scalar.
         """
@@ -77,19 +95,26 @@ class SupConLoss(nn.Module):
         # mask-out self-contrast cases
         logits_mask = torch.scatter(
             torch.ones_like(mask),
-            1,
-            torch.arange(batch_size * anchor_count).view(-1, 1).to(device),
-            0
+            dim=1,
+            index=torch.arange(batch_size * anchor_count).view(-1, 1).to(device),
+            value=0
         )
-        if elimination_mask is None:
-            elimination_mask = torch.ones_like(logits_mask)
+        if elimination_mask is None or false_neg_mode == FalseNegMode.NONE:
+            elimination_mask = torch.zeros_like(logits_mask)
 
         # TODO here add attraction
-        mask = (torch.logical_or(mask, torch.logical_not(elimination_mask))) * logits_mask
+        elimination_mask = torch.clamp(elimination_mask - mask, min=0)
+        if false_neg_mode == FalseNegMode.ATTRACTION:
+            mask = torch.logical_or(mask, elimination_mask)
+        mask = mask * logits_mask
 
         # compute log_prob
         # mask out self-contrast and elimination
-        exp_logits = tlorch.exp(logits) * logits_mask * elimination_mask
+        # TODO check elimination
+        exp_logits = torch.exp(logits) * logits_mask
+
+        if false_neg_mode == FalseNegMode.ELIMINATION:
+            exp_logits = exp_logits * torch.logical_not(elimination_mask)
 
         # log(exp(positive / t)) == positive / t it cancels out
         log_prob = logits - torch.log(exp_logits.sum(1, keepdim=True))

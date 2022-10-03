@@ -1,2 +1,2 @@
-from .supcon import SupConLoss
+from .supcon import SupConLoss, FalseNegMode
 from .supconsig import SupConSigLoss

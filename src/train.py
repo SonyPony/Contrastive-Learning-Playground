@@ -16,6 +16,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from dataset.tinyimagenet import TinyImageNet
 from model import LightningModelWrapper, BaseModel
 from common.training_type import TrainingType
+from model.loss import FalseNegMode
 from util import ExperimentLoader
 from dataset import LightningDatasetWrapper
 
@@ -35,6 +36,7 @@ def main(cfg: DictConfig):
     classes_count = cfg.data.dataset.num_classes
     cfg.data.dataset["num_classes"] = classes_count if classes_count else TinyImageNet.CLASSES_COUNT
     training_type = TrainingType(cfg.train.type)
+    cfg["train"]["loss"]["false_neg_mode"] = FalseNegMode(cfg.train.loss.false_neg_mode)
 
     # create model
     model = BaseModel(
@@ -42,6 +44,7 @@ def main(cfg: DictConfig):
         training_type=training_type,
         feature_size=cfg.model.feature_size
     )
+
     wrapped_model = LightningModelWrapper(
         model=model,
         batch_size=cfg.data.dataset.data_loader.batch_size,
