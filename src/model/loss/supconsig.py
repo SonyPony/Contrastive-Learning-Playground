@@ -23,7 +23,6 @@ class SupConSigLoss(nn.Module):
         self.bce_loss = nn.BCELoss()
 
     def forward(self, features, labels, device="cpu"):
-
         # neg score
         labels = labels[..., None]
         out = torch.squeeze(features)  # all samples (2*batch_size, N)
@@ -36,5 +35,6 @@ class SupConSigLoss(nn.Module):
         equality_mask = equality_mask.flatten()[mask]
 
         similarities = (similarities + 1) / 2
+        similarities = torch.clamp(similarities, 0, 1)
         #similarities = F.sigmoid(similarities)
         return self.bce_loss(similarities, equality_mask)
