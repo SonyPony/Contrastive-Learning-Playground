@@ -1,3 +1,3 @@
-from .lightning_stl10 import LightningDatasetWrapper
+from .lightning_dataset import LightningDatasetWrapper
 
 __all__ = ["LightningDatasetWrapper"]
