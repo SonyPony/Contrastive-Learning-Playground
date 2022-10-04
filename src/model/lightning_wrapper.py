@@ -14,6 +14,7 @@ from termcolor import cprint
 from typing import Dict
 from util import ExDict
 from common import FalseNegSettings, FalseNegMode
+from .memorybank import ClusterMemoryBank
 
 
 def negative_mask(batch_size: int, device: str) -> torch.Tensor:
@@ -54,6 +55,8 @@ class LightningModelWrapper(pl.LightningModule):
         self.experiment_cfg = experiment_cfg
         self.training_type = training_type
         self.false_neg = false_neg
+
+        self.cluster_memory = ClusterMemoryBank()
 
         self.sup_con_loss = SupConLoss()  # temperature=self.temperature)
         #if self.training_type == TrainingType.SUPERVISED_CONTRASTIVE:
@@ -102,6 +105,12 @@ class LightningModelWrapper(pl.LightningModule):
     def forward(self, x):
         return self.model(x)
 
+    def on_train_batch_start(self, batch, batch_idx: int, dataloader_idx: int):
+        if self.global_step < self.false_neg.start_step:
+            return
+
+
+
     def training_step(self, batch, batch_idx):
         pos_a, pos_b, label, sample_index = batch
 
@@ -128,8 +137,6 @@ class LightningModelWrapper(pl.LightningModule):
                 false_neg_mode=self.false_neg.mode,
                 elimination_mask=elimination_mask,
                 device=self.device)
-
-            #return self.ss_con_loss(projected_a, projected_b)
 
         else:   # otherwise it's supervised contrastive
             # add dimension (B, 1, N), where B is the batch size and N is the number of features/classes
