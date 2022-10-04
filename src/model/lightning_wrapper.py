@@ -7,13 +7,13 @@ import wandb
 import hydra
 
 from common.training_type import TrainingType
-from .loss import SupConLoss, SupConSigLoss, FalseNegMode
+from .loss import SupConLoss, SupConSigLoss
 from torch.optim import Adam, SGD
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from termcolor import cprint
 from typing import Dict
 from util import ExDict
-from .loss.supcon import FalseNegSettings
+from common import FalseNegSettings, FalseNegMode
 
 
 def negative_mask(batch_size: int, device: str) -> torch.Tensor:

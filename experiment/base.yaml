@@ -33,7 +33,6 @@ train:
   loss:
     temperature: 0.5
     tau_plus: 0.0
-    false_neg_mode: none
     debiased: false
 
     false_neg:

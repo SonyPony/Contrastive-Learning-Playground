@@ -16,7 +16,6 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from dataset.tinyimagenet import TinyImageNet
 from model import LightningModelWrapper, BaseModel
 from common.training_type import TrainingType
-from model.loss import FalseNegMode
 from util import ExperimentLoader
 from dataset import LightningDatasetWrapper
 
