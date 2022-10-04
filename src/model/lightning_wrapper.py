@@ -103,7 +103,8 @@ class LightningModelWrapper(pl.LightningModule):
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
-        pos_a, pos_b, label = batch
+        pos_a, pos_b, label, sample_index = batch
+
         _, projected_a = self.model(pos_a)
         if self.training_type == TrainingType.LINEAR_EVAL:   # linear eval
             return self.sup_loss(projected_a, label)
@@ -137,7 +138,7 @@ class LightningModelWrapper(pl.LightningModule):
             return self.sup_con_loss(projected_samples[:, None, ...], label, device=self.device)
 
     def validation_step(self, batch, batch_idx):
-        sample, _, sample_label = batch
+        sample, _, sample_label, _ = batch
         # get sample features
         sample_feature, projected_features = self.model(sample)
 

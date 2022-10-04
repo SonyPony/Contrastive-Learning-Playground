@@ -58,4 +58,4 @@ class TinyImageNetPair(TinyImageNet):
         assert self.transform
         pos_a, pos_b = self.transform(img), self.transform(img)
 
-        return pos_a, pos_b, label
+        return pos_a, pos_b, label, index
