@@ -13,6 +13,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from termcolor import cprint
 from typing import Dict
 from util import ExDict
+from .loss.supcon import FalseNegSettings
 
 
 def negative_mask(batch_size: int, device: str) -> torch.Tensor:
@@ -37,7 +38,7 @@ class LightningModelWrapper(pl.LightningModule):
         experiment_cfg: ExDict,
         batch_size: int,
         training_type: TrainingType,
-        false_neg_mode: FalseNegMode,
+        false_neg: FalseNegSettings,
         temperature: float = 0.5,
         tau_plus: float = 0.0,
         debiased: bool = False,
@@ -52,7 +53,7 @@ class LightningModelWrapper(pl.LightningModule):
         self.debiased = debiased
         self.experiment_cfg = experiment_cfg
         self.training_type = training_type
-        self.false_neg_mode = false_neg_mode
+        self.false_neg = false_neg
 
         self.sup_con_loss = SupConLoss()  # temperature=self.temperature)
         #if self.training_type == TrainingType.SUPERVISED_CONTRASTIVE:
@@ -114,7 +115,8 @@ class LightningModelWrapper(pl.LightningModule):
         # TODO if the distance between anchor and sample is smaller than projected_a and projected_b it's false negative
         similarities = torch.mm(projected_samples, projected_samples.t().contiguous())
         elimination_mask = (similarities > 0.7).float()
-
+        if self.global_step < self.false_neg.start_step:    # use attraction/elimination after the network learns something
+            elimination_mask = torch.zeros_like(elimination_mask)
 
         if self.training_type == TrainingType.SELF_SUPERVISED_CONTRASTIVE:
             # add dimension (B, 1, N), where B is the batch size and N is the number of features/classes
@@ -122,7 +124,7 @@ class LightningModelWrapper(pl.LightningModule):
             return self.sup_con_loss(
                 projected_samples[:, None, ...],
                 mask=label,
-                false_neg_mode=self.false_neg_mode,
+                false_neg_mode=self.false_neg.mode,
                 elimination_mask=elimination_mask,
                 device=self.device)
 

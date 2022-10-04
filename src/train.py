@@ -36,7 +36,6 @@ def main(cfg: DictConfig):
     classes_count = cfg.data.dataset.num_classes
     cfg.data.dataset["num_classes"] = classes_count if classes_count else TinyImageNet.CLASSES_COUNT
     training_type = TrainingType(cfg.train.type)
-    cfg["train"]["loss"]["false_neg_mode"] = FalseNegMode(cfg.train.loss.false_neg_mode)
 
     # create model
     model = BaseModel(

@@ -36,6 +36,11 @@ train:
     false_neg_mode: none
     debiased: false
 
+    false_neg:
+      _target_: model.loss.supcon.FalseNegSettings
+      mode: none
+      start_step: 0
+
 model:
   wandb_id: null
   pretrained_path: null

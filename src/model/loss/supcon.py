@@ -6,16 +6,30 @@ Copied from https://github.com/HobbitLong/SupContrast/blob/master/losses.py
 
 from __future__ import print_function
 
+from typing import Union
+
 import torch
 import torch.nn as nn
 
 from enum import Enum
+from dataclasses import dataclass
 
 
 class FalseNegMode(Enum):
     NONE = "none"
     ELIMINATION = "elimination"
     ATTRACTION = "attraction"
+
+
+@dataclass
+class FalseNegSettings:
+    mode: Union[FalseNegMode, str]
+    start_step: int
+
+    def __post_init__(self):
+        if isinstance(self.mode, str):
+            self.mode = FalseNegMode(self.mode)
+
 
 
 class SupConLoss(nn.Module):
