@@ -158,25 +158,15 @@ class LightningModelWrapper(pl.LightningModule):
         _, projected_b = self.model(pos_b)
         projected_samples = torch.cat((projected_a, projected_b))
 
-        # TODO if the distance between anchor and sample is smaller than projected_a and projected_b it's false negative
         similarities = torch.mm(projected_samples, projected_samples.t().contiguous())
-        #elimination_mask = (similarities > 0.7).float()
-
-        #if self.global_step < self.false_neg.start_step:    # use attraction/elimination after the network learns something
         elimination_mask = torch.zeros_like(similarities)
 
-
-        # TODO if
-        # TODO retrieve centroids of given samples
+        # use attraction/elimination after the network learns something
         if self.global_step >= self.false_neg.start_step and self.false_neg.mode != FalseNegMode.NONE:
             centroids, radiuses = self.cluster_memory[sample_index]
             distances = torch.linalg.norm(projected_samples[None, ...] - centroids[:, None, ...], dim=-1)
             # TODO some tolerance
             elimination_mask = (distances <= radiuses[..., None]).float().repeat(2, 1)
-
-        # TODO compare if it's in the cluster
-        # TODO change the similarity mask
-
 
         if self.training_type == TrainingType.SELF_SUPERVISED_CONTRASTIVE:
             # add dimension (B, 1, N), where B is the batch size and N is the number of features/classes
