@@ -1,9 +1,16 @@
+import torch
+
+
 class ClusterMemoryBank:
     def __init__(self):
-        self._memory = dict()
+        self.centroid, self.radius = None, None
 
-    def __setitem__(self, key: int, value):
-        self._memory[key] = value
+    def empty(self, samples_count, num_features, device="cpu"):
+        self.centroid = torch.zeros((samples_count, num_features), dtype=torch.float32, device=device)
+        self.radius = torch.zeros(samples_count, dtype=torch.float32, device=device)
 
-    def __getitem__(self, key: int):
-        return self._memory.get(key, default=None)
+    def __getitem__(self, key):
+        return self.centroid[key], self.radius[key]
+
+    def is_empty(self) -> bool:
+        return self.centroid is None or self.radius is None

@@ -10,7 +10,7 @@ from torchvision import transforms
 from typing import Callable, Optional
 from util import ExDict
 from torch.utils.data import DataLoader, BatchSampler, SequentialSampler
-from .tinyimagenet import TinyImageNetPair, SubsetType
+from .tinyimagenet import TinyImageNetSupportSet, SubsetType
 
 
 class STL10Pair(STL10):
@@ -81,6 +81,8 @@ class DatasetBase(pl.LightningDataModule):
     val: VisionDataset = field(init=False)
     test: Optional[VisionDataset] = None
 
+    train_cluster: VisionDataset = field(init=False)
+
     def __post_init__(self):
         super().__init__()
 
@@ -91,15 +93,23 @@ class LightningDatasetWrapper(DatasetBase):
         shared_params = {"root_dir": self.root_dir, "classes_count": self.num_classes}
         #shared_params = {"root": self.root_dir, "download": True, "classes_count": self.num_classes}
 
-        self.train = TinyImageNetPair(
+        self.train = TinyImageNetSupportSet(
             samples_per_class=self.train_samples_per_class,
             subset_type=SubsetType.TRAIN,
             transform=self.train_transform,
             **shared_params
         )
 
-        self.val = TinyImageNetPair(subset_type=SubsetType.TEST, transform=self.test_transform, **shared_params)
-        self.memory_bank = TinyImageNetPair(
+        self.train_cluster = TinyImageNetSupportSet(
+            samples_per_class=self.train_samples_per_class,
+            subset_type=SubsetType.TRAIN,
+            transform=self.train_transform,
+            support_set_size=8,     # TODO parametrize
+            **shared_params
+        )
+
+        self.val = TinyImageNetSupportSet(subset_type=SubsetType.TEST, transform=self.test_transform, **shared_params)
+        self.memory_bank = TinyImageNetSupportSet(
             samples_per_class=200,
             subset_type=SubsetType.TRAIN,
             transform=self.test_transform,
@@ -118,6 +128,9 @@ class LightningDatasetWrapper(DatasetBase):
         #self.train = STL10Pair(split="train+unlabeled", transform=self.train_transform, **shared_params)
         #self.val = STL10Pair(split="test", transform=self.test_transform, **shared_params)
         #self.memory_bank = STL10Pair(split="train", transform=self.test_transform, **shared_params)
+
+    def train_cluster_dataloader(self):
+        return DataLoader(self.train_cluster, shuffle=False, **self.data_loader)
 
     def memory_bank_data_loader(self):
         return DataLoader(self.memory_bank, shuffle=False, **self.data_loader)

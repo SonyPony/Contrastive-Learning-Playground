@@ -23,8 +23,17 @@ class TinyImageNet(datasets.ImageFolder):
         )
 
 
-class TinyImageNetPair(TinyImageNet):
-    def __init__(self, root_dir, subset_type: SubsetType, transform = None, classes_count: Optional[int] = None, samples_per_class: Optional[int] = None, **kwargs):
+class TinyImageNetSupportSet(TinyImageNet):
+    def __init__(
+            self,
+            root_dir,
+            subset_type: SubsetType,
+            support_set_size: int = 2,
+            transform = None,
+            classes_count: Optional[int] = None,
+            samples_per_class: Optional[int] = None,
+            **kwargs
+    ):
         super().__init__(
             root_dir=root_dir,
             subset_type=subset_type,
@@ -36,6 +45,7 @@ class TinyImageNetPair(TinyImageNet):
         original_samples_per_class = (targets == 0).sum()
         original_class_count = len(np.unique(self.targets))
 
+        self.support_set_size = support_set_size
         self.classes_count = classes_count if classes_count else original_class_count
         self.samples_per_class = samples_per_class if samples_per_class else original_samples_per_class
 
@@ -56,6 +66,4 @@ class TinyImageNetPair(TinyImageNet):
         img = self.loader(path)
 
         assert self.transform
-        pos_a, pos_b = self.transform(img), self.transform(img)
-
-        return pos_a, pos_b, label, index
+        return [self.transform(img) for _ in range(self.support_set_size)], label, index

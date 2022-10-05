@@ -15,6 +15,8 @@ from typing import Dict
 from util import ExDict
 from common import FalseNegSettings, FalseNegMode
 from .memorybank import ClusterMemoryBank
+from torch_scatter import scatter_mean, scatter_max
+from tqdm import tqdm
 
 
 def negative_mask(batch_size: int, device: str) -> torch.Tensor:
@@ -59,9 +61,6 @@ class LightningModelWrapper(pl.LightningModule):
         self.cluster_memory = ClusterMemoryBank()
 
         self.sup_con_loss = SupConLoss()  # temperature=self.temperature)
-        #if self.training_type == TrainingType.SUPERVISED_CONTRASTIVE:
-        #    self.sup_con_loss = SupConLoss() #temperature=self.temperature)
-        #elif self.training_type == TrainingType.LINEAR_EVAL:
         self.sup_loss = nn.CrossEntropyLoss()
 
         print(f"Debiased: {self.debiased}, Mode: {self.training_type}")
@@ -105,14 +104,51 @@ class LightningModelWrapper(pl.LightningModule):
     def forward(self, x):
         return self.model(x)
 
-    def on_train_batch_start(self, batch, batch_idx: int, dataloader_idx: int):
-        if self.global_step < self.false_neg.start_step:
+    def on_train_batch_start(self, *args, **kwargs):
+        super().on_train_batch_start(*args, **kwargs)
+
+        if self.global_step < self.false_neg.start_step \
+                or self.false_neg.mode == FalseNegMode.NONE\
+                or self.training_type != TrainingType.SELF_SUPERVISED_CONTRASTIVE:
+            return
+        if self.global_step % self.false_neg.memory_step and not self.cluster_memory.is_empty():
             return
 
+        train_cluster = self.trainer.datamodule.train_cluster
+        samples_count = len(train_cluster)
+        support_set_size = train_cluster.support_set_size
+        # init cluster memory
+        self.cluster_memory.empty(samples_count, self.experiment_cfg.model.feature_size, device=self.device)
 
+        with torch.no_grad():   # create the cluster statistics
+            for data, _, data_indices in tqdm(self.trainer.datamodule.train_cluster_dataloader()):
+                # results in tensor [batch * support_set, 3, H, W], where indices interlace as [0, 1, 2, 0, 1, 2, ...]
+                concatenated_data = torch.cat(data, dim=0).to(self.device)
+                _, support_set_projected = self.model(concatenated_data)
+
+                # aggregate support set statistics
+                pseudo_labels = torch.arange(0, self.batch_size).repeat(support_set_size).to(self.device)
+                mean_support_set_projected = scatter_mean(
+                    support_set_projected,
+                    index=pseudo_labels,
+                    dim=0
+                )
+
+                # store in memory bank
+                self.cluster_memory.centroid[data_indices] = mean_support_set_projected
+
+                # calculate radius
+                mean_support_set_projected = mean_support_set_projected.repeat(support_set_size, 1)
+
+                # TODO consider radius
+                distances = torch.linalg.norm(mean_support_set_projected - support_set_projected, dim=-1)
+                distances, _ = scatter_max(distances, index=pseudo_labels)
+
+                # store radius in cluster memory
+                self.cluster_memory.radius[data_indices] = distances
 
     def training_step(self, batch, batch_idx):
-        pos_a, pos_b, label, sample_index = batch
+        (pos_a, pos_b), label, sample_index = batch
 
         _, projected_a = self.model(pos_a)
         if self.training_type == TrainingType.LINEAR_EVAL:   # linear eval
@@ -124,9 +160,23 @@ class LightningModelWrapper(pl.LightningModule):
 
         # TODO if the distance between anchor and sample is smaller than projected_a and projected_b it's false negative
         similarities = torch.mm(projected_samples, projected_samples.t().contiguous())
-        elimination_mask = (similarities > 0.7).float()
-        if self.global_step < self.false_neg.start_step:    # use attraction/elimination after the network learns something
-            elimination_mask = torch.zeros_like(elimination_mask)
+        #elimination_mask = (similarities > 0.7).float()
+
+        #if self.global_step < self.false_neg.start_step:    # use attraction/elimination after the network learns something
+        elimination_mask = torch.zeros_like(similarities)
+
+
+        # TODO if
+        # TODO retrieve centroids of given samples
+        if self.global_step >= self.false_neg.start_step and self.false_neg.mode != FalseNegMode.NONE:
+            centroids, radiuses = self.cluster_memory[sample_index]
+            distances = torch.linalg.norm(projected_samples[None, ...] - centroids[:, None, ...], dim=-1)
+            # TODO some tolerance
+            elimination_mask = (distances <= radiuses[..., None]).float().repeat(2, 1)
+
+        # TODO compare if it's in the cluster
+        # TODO change the similarity mask
+
 
         if self.training_type == TrainingType.SELF_SUPERVISED_CONTRASTIVE:
             # add dimension (B, 1, N), where B is the batch size and N is the number of features/classes
@@ -145,7 +195,7 @@ class LightningModelWrapper(pl.LightningModule):
             return self.sup_con_loss(projected_samples[:, None, ...], label, device=self.device)
 
     def validation_step(self, batch, batch_idx):
-        sample, _, sample_label, _ = batch
+        (sample, _), sample_label, _ = batch
         # get sample features
         sample_feature, projected_features = self.model(sample)
 
@@ -199,7 +249,7 @@ class LightningModelWrapper(pl.LightningModule):
         if self.training_type == TrainingType.LINEAR_EVAL:
             return
 
-        for data, _, label in memory_dl:
+        for (data, _), label, _ in memory_dl:
             feature, _ = self.model(data.to(self.device, non_blocking=True))
             feature_bank.append(feature)
 
