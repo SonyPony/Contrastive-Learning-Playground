@@ -44,4 +44,4 @@ train:
 model:
   wandb_id: null
   pretrained_path: null
-  feature_size: 200   # should be num_class in supervised
+  feature_size: 512   # should be num_class in linear eval
