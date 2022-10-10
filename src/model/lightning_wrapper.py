@@ -133,16 +133,19 @@ class LightningModelWrapper(pl.LightningModule):
                     index=pseudo_labels,
                     dim=0
                 )
+                mean_support_set_projected = F.normalize(mean_support_set_projected, dim=-1)
 
                 # store in memory bank
                 self.cluster_memory.centroid[data_indices] = mean_support_set_projected
 
                 # calculate radius
-                mean_support_set_projected = mean_support_set_projected.repeat(support_set_size, 1)
+                #mean_support_set_projected = mean_support_set_projected.repeat(support_set_size, 1)
 
                 # TODO consider radius
-                distances = torch.linalg.norm(mean_support_set_projected - support_set_projected, dim=-1)
-                distances, _ = scatter_max(distances, index=pseudo_labels)
+                #distances = torch.linalg.norm(mean_support_set_projected - support_set_projected, dim=-1)
+                #distances, _ = scatter_max(distances, index=pseudo_labels)
+                #distances, _ = torch.mm(mean_support_set_projected, support_set_projected.T).min(dim=-1)
+                distances = torch.mm(mean_support_set_projected, support_set_projected.T).mean(dim=-1)
 
                 # store radius in cluster memory
                 self.cluster_memory.radius[data_indices] = distances
@@ -164,9 +167,12 @@ class LightningModelWrapper(pl.LightningModule):
         # use attraction/elimination after the network learns something
         if self.global_step >= self.false_neg.start_step and self.false_neg.mode != FalseNegMode.NONE:
             centroids, radiuses = self.cluster_memory[sample_index]
-            distances = torch.linalg.norm(projected_samples[None, ...] - centroids[:, None, ...], dim=-1)
-            # TODO some tolerance
-            elimination_mask = (distances <= radiuses[..., None]).float().repeat(2, 1)
+
+            centroid_similarity = torch.mm(projected_samples, centroids.T)
+            # TODO parametrize tolerance
+            elimination_mask = (centroid_similarity > radiuses * 0.7).T.float().repeat(2, 1)
+            #distances = torch.linalg.norm(projected_samples[None, ...] - centroids[:, None, ...], dim=-1)
+            #elimination_mask = (distances <= radiuses[..., None]).float().repeat(2, 1)
 
         if self.training_type == TrainingType.SELF_SUPERVISED_CONTRASTIVE:
             # add dimension (B, 1, N), where B is the batch size and N is the number of features/classes
