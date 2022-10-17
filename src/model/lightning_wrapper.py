@@ -15,14 +15,14 @@ from typing import Dict
 from util import ExDict
 from common import FalseNegSettings, FalseNegMode
 from .memorybank import ClusterMemoryBank
-from torch_scatter import scatter_mean, scatter_max
+from torch_scatter import scatter_mean
 from tqdm import tqdm
 
 
 def negative_mask(batch_size: int, device: str) -> torch.Tensor:
     """
     Given a batch size, it generates a mask for negative pairs. Given a matrix (batch_size, batch_size),
-    where each sample is compared. It produces True for negative pairs and False for positive pairs.
+    where each sample is compared. It produces True for negatilve pairs and False for positive pairs.
     :param batch_size: Original batch size N, not 2N (with augmented)
     """
 
@@ -136,7 +136,7 @@ class LightningModelWrapper(pl.LightningModule):
                 mean_support_set_projected = F.normalize(mean_support_set_projected, dim=-1)
 
                 # store in memory bank
-                self.cluster_memory.centroid[data_indices] = mean_support_set_projected
+                self.cluster_memory.update_centroids(mean_support_set_projected, keys=data_indices)
 
                 # calculate radius
                 #mean_support_set_projected = mean_support_set_projected.repeat(support_set_size, 1)
@@ -148,7 +148,7 @@ class LightningModelWrapper(pl.LightningModule):
                 distances = torch.mm(mean_support_set_projected, support_set_projected.T).mean(dim=-1)
 
                 # store radius in cluster memory
-                self.cluster_memory.radius[data_indices] = distances
+                self.cluster_memory.update_radius(distances, keys=data_indices)
 
     def training_step(self, batch, batch_idx):
         (pos_a, pos_b), label, sample_index = batch
