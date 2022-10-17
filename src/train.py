@@ -1,3 +1,12 @@
+import sys
+if not sys.platform == "win32":
+    from termcolor import cprint
+    from safe_gpu import safe_gpu
+
+    available_gpus = safe_gpu.get_free_gpus()
+    cprint(f"Available GPUs: {available_gpus}", color="yellow")
+    safe_gpu.GPUOwner()
+
 import pytorch_lightning as pl
 import hydra
 import torch
@@ -5,7 +14,6 @@ import torchvision.transforms as transforms
 from torchvision.transforms import InterpolationMode
 
 import transform as T
-import sys
 import wandb
 
 from omegaconf import DictConfig
@@ -24,10 +32,6 @@ from dataset import LightningDatasetWrapper
 def main(cfg: DictConfig):
     pl.seed_everything(42)
     torch.multiprocessing.set_sharing_strategy('file_system')
-
-    if not sys.platform == "win32":
-        from safe_gpu import safe_gpu
-        safe_gpu.GPUOwner()
 
     # load experiment parameters
     cfg = ExperimentLoader.load_data(cfg)
@@ -92,7 +96,6 @@ def main(cfg: DictConfig):
         devices=cfg.train.gpus,
         logger=logger,
         accelerator="gpu",
-        auto_select_gpus=True,
         check_val_every_n_epoch=None,
         replace_sampler_ddp=False,
         strategy=DDPPlugin(find_unused_parameters=False),
