@@ -153,4 +153,6 @@ class LightningDatasetWrapper(DatasetBase):
         )
 
     def val_dataloader(self):
-        return DataLoader(self.val, **self.data_loader)
+        kwargs = self.data_loader
+        kwargs["drop_last"] = False
+        return DataLoader(self.val, **kwargs)
