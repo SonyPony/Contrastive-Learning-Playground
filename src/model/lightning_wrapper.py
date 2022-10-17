@@ -226,16 +226,16 @@ class LightningModelWrapper(pl.LightningModule):
 
         if self.class_count > 5:
             self.val_acc_t_5(pred_scores, sample_label)
-            self.log("val/acc-5", self.val_acc_t_5)
-        self.log("val/acc-1", self.val_acc_t_1)
+            self.log("val/acc-5", self.val_acc_t_5, on_step=True)
+        self.log("val/acc-1", self.val_acc_t_1, on_step=True)
 
-    def on_validation_epoch_start(self):
+    def on_validation_start(self) -> None:
         """
         Create validation accuracy - the predicted class is based on the label of a
         training with the most similar feature vector.
         """
 
-        super().on_validation_epoch_start()
+        super().on_validation_start()
         feature_bank = list()
 
         # create features database
@@ -255,8 +255,8 @@ class LightningModelWrapper(pl.LightningModule):
         self.feature_labels = torch.tensor(memory_dl.dataset.targets, device=self.device)
 
 
-    def on_validation_epoch_end(self):
-        super().on_validation_epoch_end()
+    def on_validation_end(self) -> None:
+        super().on_validation_end()
 
         self.feature_bank = None
         self.feature_labels = None
