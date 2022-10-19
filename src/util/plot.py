@@ -1,13 +1,18 @@
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
+
+def colors():
+    return ['14C8B7', 'EDB732', 'AD70FF', 'FF617B', 'FF8A4F', '0053D6']
+
+
 def set_style():
     title_color = "223991"
     axes_color = 'C3C8D1'
     axes_textcolor = '6C6C77'
 
     plt.rcParams["font.family"] = "DM Mono"
-    plt.rcParams["axes.prop_cycle"] = mpl.cycler(color=['14C8B7', 'EDB732', 'AD70FF', 'FF617B', 'FF8A4F', '0053D6'])
+    plt.rcParams["axes.prop_cycle"] = mpl.cycler(color=colors())
     plt.rcParams["axes.spines.top"] = False
     plt.rcParams["axes.spines.right"] = False
     plt.rcParams["axes.linewidth"] = 1.5
