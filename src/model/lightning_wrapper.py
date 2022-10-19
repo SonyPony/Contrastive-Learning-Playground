@@ -59,6 +59,8 @@ class LightningModelWrapper(pl.LightningModule):
         self.false_neg = false_neg
 
         self.cluster_memory = ClusterMemoryBank()
+        # TODO parametrize
+        self.cluster_memory.decay_rate = 1
 
         self.sup_con_loss = SupConLoss()  # temperature=self.temperature)
         self.sup_loss = nn.CrossEntropyLoss()
@@ -127,7 +129,8 @@ class LightningModelWrapper(pl.LightningModule):
                 _, support_set_projected = self.model(concatenated_data)
 
                 # aggregate support set statistics
-                pseudo_labels = torch.arange(0, self.batch_size).repeat(support_set_size).to(self.device)
+                batch_size = min(self.batch_size, len(concatenated_data) // support_set_size)
+                pseudo_labels = torch.arange(0, batch_size).repeat(support_set_size).to(self.device)
                 mean_support_set_projected = scatter_mean(
                     support_set_projected,
                     index=pseudo_labels,
@@ -165,11 +168,14 @@ class LightningModelWrapper(pl.LightningModule):
         elimination_mask = torch.zeros_like(similarities)
 
         # use attraction/elimination after the network learns something
-        if self.global_step >= self.false_neg.start_step and self.false_neg.mode != FalseNegMode.NONE:
+        if self.global_step >= self.false_neg.start_step and self.false_neg.mode != FalseNegMode.NONE \
+                and self.training_type == TrainingType.SELF_SUPERVISED_CONTRASTIVE:
             centroids, radiuses = self.cluster_memory[sample_index]
 
             centroid_similarity = torch.mm(projected_samples, centroids.T)
             # TODO parametrize tolerance
+            # TODO info, false positive 30, false negative 6 for now, batch size=8
+            # TODO what about soft elimination mask?? not 1, but soft
             elimination_mask = (centroid_similarity > radiuses * 0.7).T.float().repeat(2, 1)
             #distances = torch.linalg.norm(projected_samples[None, ...] - centroids[:, None, ...], dim=-1)
             #elimination_mask = (distances <= radiuses[..., None]).float().repeat(2, 1)
