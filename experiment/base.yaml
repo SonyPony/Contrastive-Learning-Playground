@@ -40,7 +40,7 @@ train:
       _target_: model.loss.supcon.FalseNegSettings
       mode: none
       start_step: 0
-      memory_step: 100
+      memory_step: 100  # TODO -1 disables memory bank
 
 model:
   wandb_id: null

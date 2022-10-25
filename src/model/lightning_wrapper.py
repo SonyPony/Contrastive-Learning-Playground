@@ -57,6 +57,7 @@ class LightningModelWrapper(pl.LightningModule):
         self.experiment_cfg = experiment_cfg
         self.training_type = training_type
         self.false_neg = false_neg
+        self.use_cluster_mem = self.false_neg.memory_step != -1
 
         self.cluster_memory = ClusterMemoryBank()
         # TODO parametrize
@@ -110,6 +111,8 @@ class LightningModelWrapper(pl.LightningModule):
     def on_train_batch_start(self, *args, **kwargs):
         super().on_train_batch_start(*args, **kwargs)
 
+        if not self.use_cluster_mem:
+            return
         if self.global_step < self.false_neg.start_step \
                 or self.false_neg.mode == FalseNegMode.NONE\
                 or self.training_type != TrainingType.SELF_SUPERVISED_CONTRASTIVE:
@@ -173,15 +176,17 @@ class LightningModelWrapper(pl.LightningModule):
         # use attraction/elimination after the network learns something
         if self.global_step >= self.false_neg.start_step and self.false_neg.mode != FalseNegMode.NONE \
                 and self.training_type == TrainingType.SELF_SUPERVISED_CONTRASTIVE:
-            centroids, radiuses = self.cluster_memory[sample_index]
+            if self.use_cluster_mem:
+                centroids, radiuses = self.cluster_memory[sample_index]
 
-            centroid_similarity = torch.mm(projected_samples, centroids.T)
-            # TODO parametrize tolerance
-            # TODO info, false positive 30, false negative 6 for now, batch size=8
-            # TODO what about soft elimination mask?? not 1, but soft
-            elimination_mask = (centroid_similarity > radiuses * 0.7).T.float().repeat(2, 1)
-            #distances = torch.linalg.norm(projected_samples[None, ...] - centroids[:, None, ...], dim=-1)
-            #elimination_mask = (distances <= radiuses[..., None]).float().repeat(2, 1)
+                centroid_similarity = torch.mm(projected_samples, centroids.T)
+                # TODO parametrize tolerance
+                # TODO info, false positive 30, false negative 6 for now, batch size=8
+                # TODO what about soft elimination mask?? not 1, but soft
+                elimination_mask = (centroid_similarity > radiuses * 0.7).T.float().repeat(self.support_set_size, 1)
+
+            else:   # use 'original' approach
+                elimination_mask = (similarities > 0.7).float()
 
         if self.training_type == TrainingType.SELF_SUPERVISED_CONTRASTIVE:
             batch_size = projected_samples.shape[0] // self.support_set_size
