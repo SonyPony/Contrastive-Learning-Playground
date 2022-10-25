@@ -39,6 +39,7 @@ def set_style():
     plt.rcParams["legend.frameon"] = False
     plt.rcParams["legend.loc"] = "upper center"
 
+    plt.rcParams["axes.titlepad"] = 10
     plt.rcParams["figure.subplot.top"] = 0.90
     plt.rcParams["figure.subplot.bottom"] = 0.23
     plt.rcParams["figure.subplot.right"] = 0.98
