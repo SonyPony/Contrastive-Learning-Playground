@@ -73,6 +73,7 @@ class DatasetBase(pl.LightningDataModule):
     train_samples_per_class: int
     num_classes: int  # TODO pass to datasets
     false_positive_perc: float
+    support_set_size: int
 
     train_transform: Optional[Callable] = None
     test_transform: Optional[Callable] = None
@@ -97,6 +98,7 @@ class LightningDatasetWrapper(DatasetBase):
             samples_per_class=self.train_samples_per_class,
             subset_type=SubsetType.TRAIN,
             transform=self.train_transform,
+            support_set_size=self.support_set_size,
             **shared_params
         )
 
@@ -104,7 +106,7 @@ class LightningDatasetWrapper(DatasetBase):
             samples_per_class=self.train_samples_per_class,
             subset_type=SubsetType.TRAIN,
             transform=self.train_transform,
-            support_set_size=8,     # TODO parametrize
+            support_set_size=self.support_set_size,
             **shared_params
         )
 

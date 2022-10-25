@@ -19,18 +19,18 @@ from torch_scatter import scatter_mean
 from tqdm import tqdm
 
 
-def negative_mask(batch_size: int, device: str) -> torch.Tensor:
+def negative_mask(batch_size: int, device: str, support_set_size: int) -> torch.Tensor:
     """
     Given a batch size, it generates a mask for negative pairs. Given a matrix (batch_size, batch_size),
     where each sample is compared. It produces True for negatilve pairs and False for positive pairs.
     :param batch_size: Original batch size N, not 2N (with augmented)
     """
 
-    mask = torch.ones((batch_size,) * 2, dtype=torch.bool, device=device)
+    mask = torch.ones((batch_size,) * 2, dtype=torch.bool, device=device)    # [B, B] of ones, where B is the batch size
     # remove identity
-    mask = torch.logical_xor(mask, torch.eye(batch_size, dtype=torch.bool, device=device))
+    mask = torch.logical_xor(mask, torch.eye(batch_size, dtype=torch.bool, device=device))  # remove identities (diagonal)
     # replicate for augmented samples as well
-    return mask.repeat(2, 2)
+    return mask.repeat(support_set_size, support_set_size)    # repeat for all augmented views
 
 
 class LightningModelWrapper(pl.LightningModule):
@@ -61,6 +61,7 @@ class LightningModelWrapper(pl.LightningModule):
         self.cluster_memory = ClusterMemoryBank()
         # TODO parametrize
         self.cluster_memory.decay_rate = 1
+        self.support_set_size = self.experiment_cfg.data.dataset.support_set_size
 
         self.sup_con_loss = SupConLoss()  # temperature=self.temperature)
         self.sup_loss = nn.CrossEntropyLoss()
@@ -83,7 +84,7 @@ class LightningModelWrapper(pl.LightningModule):
         neg = torch.exp(torch.mm(out, out.t().contiguous()) / self.temperature)     # NOQA
 
         # mask out identities
-        mask = negative_mask(self.batch_size, device=self.device)
+        mask = negative_mask(self.batch_size, device=self.device, support_set_size=self.support_set_size)
         neg = neg[mask].view(samples_count, -1)
 
         # pos score
@@ -154,15 +155,17 @@ class LightningModelWrapper(pl.LightningModule):
                 self.cluster_memory.update_radius(distances, keys=data_indices)
 
     def training_step(self, batch, batch_idx):
-        (pos_a, pos_b), label, sample_index = batch
+        samples, label, sample_index = batch
 
-        _, projected_a = self.model(pos_a)
+        _, projected_a = self.model(samples[0])
         if self.training_type == TrainingType.LINEAR_EVAL:   # linear eval
             return self.sup_loss(projected_a, label)
 
-        # compute augmented view
-        _, projected_b = self.model(pos_b)
-        projected_samples = torch.cat((projected_a, projected_b))
+        # compute augmented views (support set)
+        # skip the anchor sample
+        projected_b = [self.model(s)[1] for s in samples[1:]]   # _, projected (get seoncd value)
+        #_, projected_b = self.model(pos_b)
+        projected_samples = torch.cat([projected_a] + projected_b)
 
         similarities = torch.mm(projected_samples, projected_samples.t().contiguous())
         elimination_mask = torch.zeros_like(similarities)
@@ -181,8 +184,9 @@ class LightningModelWrapper(pl.LightningModule):
             #elimination_mask = (distances <= radiuses[..., None]).float().repeat(2, 1)
 
         if self.training_type == TrainingType.SELF_SUPERVISED_CONTRASTIVE:
+            batch_size = projected_samples.shape[0] // self.support_set_size
             # add dimension (B, 1, N), where B is the batch size and N is the number of features/classes
-            label = torch.logical_not(negative_mask(self.batch_size, self.device))
+            label = torch.logical_not(negative_mask(batch_size, self.device, self.support_set_size))
             return self.sup_con_loss(
                 projected_samples[:, None, ...],
                 mask=label,
@@ -192,12 +196,11 @@ class LightningModelWrapper(pl.LightningModule):
 
         else:   # otherwise it's supervised contrastive
             # add dimension (B, 1, N), where B is the batch size and N is the number of features/classes
-            projected_samples = torch.cat((projected_a, projected_b))
             label = torch.cat((label, label))
             return self.sup_con_loss(projected_samples[:, None, ...], label, device=self.device)
 
     def validation_step(self, batch, batch_idx):
-        (sample, _), sample_label, _ = batch
+        (sample, _), sample_label, _ = batch    # works because, validation has support set 2
         # get sample features
         sample_feature, projected_features = self.model(sample)
 
