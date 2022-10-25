@@ -240,8 +240,8 @@ class LightningModelWrapper(pl.LightningModule):
 
         if self.class_count > 5:
             self.val_acc_t_5(pred_scores, sample_label)
-            self.log("val/acc-5", self.val_acc_t_5, on_step=True)
-        self.log("val/acc-1", self.val_acc_t_1, on_step=True)
+            self.log("val/acc-5", self.val_acc_t_5)
+        self.log("val/acc-1", self.val_acc_t_1)
 
     def on_validation_start(self) -> None:
         """
