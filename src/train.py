@@ -5,7 +5,7 @@ if not sys.platform == "win32":
 
     available_gpus = safe_gpu.get_free_gpus()
     cprint(f"Available GPUs: {available_gpus}", color="yellow")
-    safe_gpu.GPUOwner()
+    #safe_gpu.GPUOwner()
 
 import pytorch_lightning as pl
 import hydra
