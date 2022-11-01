@@ -2,12 +2,12 @@ import pytorch_lightning as pl
 import torch
 import numpy as np
 
-from .ss_sampler import SSSampler
+from .ss_sampler import SSSampler, ImbalancedSampler
 from PIL import Image
 from dataclasses import dataclass, field
 from torchvision.datasets import STL10, CIFAR10, VisionDataset
 from torchvision import transforms
-from typing import Callable, Optional
+from typing import Callable, Optional, List
 from util import ExDict
 from torch.utils.data import DataLoader, BatchSampler, SequentialSampler
 from .tinyimagenet import TinyImageNetSupportSet, SubsetType
@@ -74,6 +74,7 @@ class DatasetBase(pl.LightningDataModule):
     num_classes: int  # TODO pass to datasets
     false_positive_perc: float
     support_set_size: int
+    class_probs: List[float]
 
     train_transform: Optional[Callable] = None
     test_transform: Optional[Callable] = None
@@ -138,8 +139,23 @@ class LightningDatasetWrapper(DatasetBase):
         return DataLoader(self.memory_bank, shuffle=False, **self.data_loader)
 
     def train_dataloader(self):
-        if self.false_positive_perc is None:
+        # TODO add condition (probs are defined)
+        if self.false_positive_perc is None and not len(self.class_probs):
             return DataLoader(self.train, shuffle=True, **self.data_loader)
+
+        elif len(self.class_probs):
+            return DataLoader(
+                self.train,
+                batch_sampler=ImbalancedSampler(
+                    batch_size=self.data_loader.get("batch_size"),
+                    samples_per_class=self.train.samples_per_class,
+                    classes_count=self.train.classes_count,
+                    class_probs=self.class_probs,
+                    drop_last=self.data_loader.get("drop_last")
+                ),
+                pin_memory=self.data_loader.get("pin_memory"),
+                num_workers=self.data_loader.get("num_workers")
+            )
 
         return DataLoader(
             self.train,

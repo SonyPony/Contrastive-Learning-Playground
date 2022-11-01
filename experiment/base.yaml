@@ -11,6 +11,7 @@ data:
     train_samples_per_class: null
     num_classes: null
     false_positive_perc: null
+    class_probs: []
     support_set_size: 2
 
     data_loader:
