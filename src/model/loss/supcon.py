@@ -27,6 +27,7 @@ class SupConLoss(nn.Module):
             labels=None,
             mask=None,
             elimination_mask=None,
+            confidence_mask=None,
             false_neg_mode: FalseNegMode = FalseNegMode.NONE,
             device="cpu"):
         """Compute loss for model. If both `labels` and `mask` are None,
@@ -95,11 +96,16 @@ class SupConLoss(nn.Module):
         if elimination_mask is None or false_neg_mode == FalseNegMode.NONE:
             elimination_mask = torch.zeros_like(logits_mask)
 
+        # add confidence
+        if confidence_mask is None:
+            confidence_mask = torch.ones_like(elimination_mask)
+
         # TODO here add attraction
         elimination_mask = torch.clamp(elimination_mask - mask, min=0)
         if false_neg_mode == FalseNegMode.ATTRACTION:
+            confidence_mask[mask.bool()] = 1.
             mask = torch.logical_or(mask, elimination_mask)
-        mask = mask * logits_mask
+        mask = mask * logits_mask * confidence_mask
 
         # compute log_prob
         # mask out self-contrast and elimination
