@@ -132,3 +132,5 @@ data/
 src/outputs
 log/
 artifacts/
+*.pth
+*.pdf
