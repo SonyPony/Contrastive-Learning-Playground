@@ -13,9 +13,9 @@ def load_data(positive: bool):
 
     for batch_size in batch_size_list:
         if positive:
-            FILE = f"../data_{batch_size}.pth"
+            FILE = f"../outputs/data_{batch_size}.pth"
         else:
-            FILE = f"../data_{batch_size}_neg.pth"
+            FILE = f"../outputs/data_{batch_size}_neg.pth"
 
         complete_data = torch.load(FILE)
 
@@ -61,19 +61,21 @@ for positive in (False, True):
     vp = ax.violinplot(D, x, widths=1,
                        showmeans=True, showmedians=False, showextrema=True)
     # styling:
+    color = "red" if not positive else "#6C6C77"
     for i, body in enumerate(vp['bodies']):
-        body.set_alpha(0.3)
-        if i != 2:
-            body.set_facecolor("#C3C8D1")
+        body.set_alpha(0.1)
+        #if i != 2:
+        #    body.set_facecolor("#C3C8D1")
+        body.set_facecolor(color)
         if not positive:
-            body.set_facecolor("red")
-            body.set_alpha(0.1)
+            body.set_alpha(0.3)
 
 
     p = vp["cmeans"]
     cmean_colors = p.get_color()
     colors = [
-        "#C3C8D1" if i != 128 else cmean_colors[0]
+        color
+        #"#C3C8D1" if i != 128 else cmean_colors[0]
         for i in batch_size_list
     ]
 
@@ -86,10 +88,6 @@ for positive in (False, True):
         p.set_alpha(0.6)
 
         cmean_colors = p.get_color()
-        colors = [
-            "#C3C8D1" if i != 128 else cmean_colors[0]
-            for i in batch_size_list
-        ]
         p.set_color(colors)
 
 
