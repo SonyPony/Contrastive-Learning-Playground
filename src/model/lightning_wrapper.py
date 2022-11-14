@@ -207,7 +207,7 @@ class LightningModelWrapper(pl.LightningModule):
                 mask=label,
                 false_neg_mode=self.false_neg.mode,
                 elimination_mask=elimination_mask,
-                confidence_mask=similarities,   # TODO parametrize usage of confidence
+                confidence_mask=similarities if self.false_neg.soft else None,   # TODO check
                 device=self.device)
 
         else:   # otherwise it's supervised contrastive

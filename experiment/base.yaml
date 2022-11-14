@@ -42,6 +42,7 @@ train:
       mode: none
       start_step: 0
       memory_step: -1  # TODO -1 disables memory bank
+      soft: false
 
 model:
   wandb_id: null

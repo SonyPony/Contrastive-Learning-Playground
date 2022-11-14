@@ -14,6 +14,7 @@ class FalseNegSettings:
     mode: Union[FalseNegMode, str]
     start_step: int
     memory_step: int
+    soft: bool
 
     def __post_init__(self):
         if isinstance(self.mode, str):
