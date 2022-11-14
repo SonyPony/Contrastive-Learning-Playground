@@ -186,7 +186,17 @@ class LightningModelWrapper(pl.LightningModule):
                 elimination_mask = (centroid_similarity > radiuses * 0.7).T.float().repeat(self.support_set_size, 1)
 
             else:   # use 'original' approach
-                elimination_mask = (similarities > 0.7).float()
+                threshold_mask = similarities > 0.7
+
+                # compute top-k
+                # TODO aggregation
+                top, indices = torch.topk(similarities, k=10)   # TODO parametrize
+
+                topk_mask = torch.zeros_like(similarities)
+                for i, row_indices in enumerate(indices):   # info: because torch.scatter doesn't work for some reason.
+                    topk_mask[i, row_indices] = 1
+
+                elimination_mask = torch.logical_and(threshold_mask, topk_mask).float()
 
         if self.training_type == TrainingType.SELF_SUPERVISED_CONTRASTIVE:
             batch_size = projected_samples.shape[0] // self.support_set_size
