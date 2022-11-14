@@ -316,9 +316,9 @@ class LightningModelWrapper(pl.LightningModule):
 
         return self.merge_state_dict(loaded_weights)
 
-    def load_model(self):
+    def load_model(self, wandb_id=None):
         model_params = self.experiment_cfg.model
-        wandb_id = self.experiment_cfg.model.wandb_id
+        wandb_id = self.experiment_cfg.model.wandb_id if wandb_id is None else wandb_id
 
         if wandb_id:  # if wandb id is set, load the model from the wandb cloud
             cprint(f"Loading wandb: {wandb_id}", color="blue")
